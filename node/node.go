@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	logger "log"
+	"sync"
 	"time"
 
 	"github.com/golang/protobuf/ptypes/any"
@@ -31,16 +32,19 @@ const (
 
 type Node struct {
 	state           State
+	stateLock       *sync.RWMutex
 	timer           time.Timer
 	electionTimeout int64
 	heartbeat       int64
 
-	currentTerm int64
-	votedFor    network.PeerId
-	commitIndex int64
-	lastApplied int64
-	nextIndex   map[network.PeerId]int64
-	matchIndex  map[network.PeerId]int64
+	currentTerm     int64
+	currentTermLock *sync.RWMutex
+	votedFor        network.PeerId
+	votedForLock    *sync.RWMutex
+	commitIndex     int64
+	lastApplied     int64
+	nextIndex       map[network.PeerId]int64
+	matchIndex      map[network.PeerId]int64
 
 	log          log.Log
 	stateMachine state_machine.StateMachine
@@ -51,6 +55,42 @@ type ReplicationResponse struct {
 	ReplicationStatus ReplicationStatus
 	LeaderID          network.PeerId
 	Result            *any.Any
+}
+
+func (n *Node) getState() State {
+	n.stateLock.RLock()
+	defer n.stateLock.RUnlock()
+	return n.state
+}
+
+func (n *Node) setState(newState State) {
+	n.stateLock.Lock()
+	defer n.stateLock.Unlock()
+	n.state = newState
+}
+
+func (n *Node) getVotedFor() network.PeerId {
+	n.votedForLock.RLock()
+	defer n.votedForLock.RUnlock()
+	return n.votedFor
+}
+
+func (n *Node) setVotedFor(peerId network.PeerId) {
+	n.votedForLock.Lock()
+	defer n.votedForLock.Unlock()
+	n.votedFor = peerId
+}
+
+func (n *Node) getCurrentTerm() int64 {
+	n.currentTermLock.RLock()
+	defer n.currentTermLock.RUnlock()
+	return n.currentTerm
+}
+
+func (n *Node) setCurrentTerm(newTerm int64) {
+	n.currentTermLock.Lock()
+	defer n.currentTermLock.Unlock()
+	n.currentTerm = newTerm
 }
 
 func (n *Node) resetTimer() {
@@ -67,21 +107,21 @@ func (n *Node) runFollowerIteration() {
 
 	select {
 	case <-n.timer.C:
-		n.state = Candidate
+		n.setState(Candidate)
 	default:
 		return
 	}
 }
 
 func (n *Node) runCandidateIteration() {
-	n.currentTerm += 1
-	n.votedFor = n.network.GetId()
+	n.setCurrentTerm(n.getCurrentTerm() + 1)
+	n.setVotedFor(n.network.GetId())
 	n.resetTimer()
-	n.network.SendRequestVoteAsync(n.currentTerm)
+	n.network.SendRequestVoteAsync(n.getCurrentTerm())
 	select {
 	// TODO(Optional): also check network for received AppendEntriesRPC from new leader
 	case <-n.network.GotMajorityVote():
-		n.state = Leader
+		n.setState(Leader)
 		// TODO: commit blank no-op to prevent stale reads
 	case <-n.timer.C:
 		return
@@ -120,7 +160,7 @@ func (n *Node) runLeaderIteration() {
 				logger.Fatalf("Failed to get entry for next commit index %d from log.", n.commitIndex+1)
 				continue
 			}
-			if n.matchIndex[peerId] > n.commitIndex && nextCommitLogEntry.Term == n.currentTerm {
+			if n.matchIndex[peerId] > n.commitIndex && nextCommitLogEntry.Term == n.getCurrentTerm() {
 				numReadyToCommitNext += 1
 			}
 		}
@@ -142,11 +182,12 @@ func (n *Node) Run(ctx context.Context) {
 				n.resetTimer()
 			}
 			networkGreatestTerm := n.network.CheckGreatestTerm()
-			if networkGreatestTerm > n.currentTerm {
-				n.state = Follower
+			if networkGreatestTerm > n.getCurrentTerm() {
+				n.setCurrentTerm(networkGreatestTerm)
+				n.setState(Follower)
 			}
 
-			switch n.state {
+			switch n.getState() {
 			case Follower:
 				n.runFollowerIteration()
 			case Candidate:
@@ -174,14 +215,14 @@ func (n *Node) Run(ctx context.Context) {
 func (n *Node) HandleReplicationRequest(ctx context.Context, clientID string, serializationID int64, entry *any.Any) (ReplicationResponse, error) {
 	// TODO: implement setters and getters with read write mutex for state, currentTerm, votedFor
 	res := ReplicationResponse{}
-	if n.state != Leader {
+	if n.getState() != Leader {
 		res.ReplicationStatus = NotLeader
 		// best effort, might not be leader
-		res.LeaderID = n.votedFor
+		res.LeaderID = n.getVotedFor()
 		return res, nil
 	}
 
-	n.log.AppendEntry(n.currentTerm, clientID, serializationID, entry)
+	n.log.AppendEntry(n.getCurrentTerm(), clientID, serializationID, entry)
 
 	select {
 	case <-ctx.Done():
