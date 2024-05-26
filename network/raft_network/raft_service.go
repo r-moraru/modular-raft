@@ -36,6 +36,9 @@ func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRe
 		return r.buildAppendEntriesResponse(false), nil
 	}
 
+	// TODO: respond with success if already applied
+	// TODO: revert to follower if not already, reset timer, update term if greater
+
 	err = r.raftNode.AppendEntry(req.Entry)
 	if err != nil {
 		return r.buildAppendEntriesResponse(false), err
@@ -61,6 +64,5 @@ func (r *RaftService) RequestVote(ctx context.Context, req *pb.RequestVoteReques
 	r.raftNode.SetVotedForTerm(req.GetTerm(), true)
 	r.raftNode.SetVotedFor(req.GetCandidateId())
 
-	// TODO: update raft node term and set voted for
 	return r.buildRequestVoteResponse(true), nil
 }

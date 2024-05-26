@@ -75,18 +75,11 @@ func (n *Node) SetVotedForTerm(term uint64, voted bool) {
 	// TODO: implement voted for term
 }
 
-func (n *Node) resetTimer() {
+func (n *Node) ResetTimer() {
 	n.timer.Reset(time.Duration(n.electionTimeout) * time.Millisecond)
 }
 
 func (n *Node) runFollowerIteration() {
-	entry := n.network.GetNewLogEntry()
-	if entry != nil {
-		n.log.InsertLogEntry(entry)
-	}
-
-	n.commitIndex = n.network.GetUpdatedCommitIndex(n.commitIndex)
-
 	select {
 	case <-n.timer.C:
 		n.SetState(node.Candidate)
@@ -98,13 +91,17 @@ func (n *Node) runFollowerIteration() {
 func (n *Node) runCandidateIteration() {
 	n.SetCurrentTerm(n.GetCurrentTerm() + 1)
 	n.SetVotedFor(n.network.GetId())
-	n.resetTimer()
+	n.ResetTimer()
 	n.network.SendRequestVoteAsync(n.GetCurrentTerm())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	select {
 	// TODO(Optional): also check network for received AppendEntriesRPC from new leader
-	case <-n.network.GotMajorityVote():
+	case <-n.network.GotMajorityVote(ctx):
 		n.SetState(node.Leader)
 		// TODO: commit blank no-op to prevent stale reads
+		// TODO: reset leader bookkeeping
 	case <-n.timer.C:
 		return
 	}
@@ -113,27 +110,15 @@ func (n *Node) runCandidateIteration() {
 func (n *Node) runLeaderIteration() {
 	numReadyToCommitNext := 0
 	for peerId, index := range n.nextIndex {
-		termAtPeerIndex, err := n.log.GetTermAtIndex(index)
-		if err != nil {
-			logger.Fatalf("Failed to get term at index %d from log.", index)
-			continue
-		}
-		peerResponse := n.network.GetAppendEntryResponse(index, termAtPeerIndex, peerId)
-		switch peerResponse {
-		case network.Success:
-			n.matchIndex[peerId] = n.nextIndex[peerId]
-			n.nextIndex[peerId] += 1
-		case network.LogInconsistency:
-			n.nextIndex[peerId] -= 1
-		}
-
 		if n.matchIndex[peerId] != n.log.GetLastIndex() {
 			logEntry, err := n.log.GetEntry(index)
 			if err != nil {
 				logger.Fatalf("Failed to get entry at index %d from log.", index)
 				continue
 			}
-			n.network.SendAppendEntryAsync(peerId, logEntry)
+			n.SendAppendEntry(peerId, logEntry)
+		} else {
+			n.network.SendHeartbeat(peerId)
 		}
 
 		if n.commitIndex < n.log.GetLastIndex() {
@@ -148,7 +133,7 @@ func (n *Node) runLeaderIteration() {
 		}
 	}
 
-	if numReadyToCommitNext > len(n.matchIndex) {
+	if numReadyToCommitNext > len(n.matchIndex)/2 {
 		n.commitIndex += 1
 	}
 	time.Sleep(time.Duration(n.heartbeat) * time.Millisecond)
@@ -160,15 +145,6 @@ func (n *Node) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			if n.network.CheckUpdateTimer() {
-				n.resetTimer()
-			}
-			networkGreatestTerm := n.network.CheckGreatestTerm()
-			if networkGreatestTerm > n.GetCurrentTerm() {
-				n.SetCurrentTerm(networkGreatestTerm)
-				n.SetState(node.Follower)
-			}
-
 			switch n.GetState() {
 			case node.Follower:
 				n.runFollowerIteration()
@@ -243,4 +219,17 @@ func (n *Node) VotedForTerm(term uint64) bool {
 
 func (n *Node) GetLastLogIndex() uint64 {
 	return n.log.GetLastIndex()
+}
+
+func (n *Node) SendAppendEntry(peerId string, logEntry *entries.LogEntry) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(n.heartbeat)*time.Millisecond)
+	defer cancel()
+	responseStatus := n.network.SendAppendEntry(ctx, peerId, logEntry)
+	switch responseStatus {
+	case network.Success:
+		n.matchIndex[peerId] = n.nextIndex[peerId]
+		n.nextIndex[peerId] += 1
+	case network.LogInconsistency:
+		n.nextIndex[peerId] -= 1
+	}
 }

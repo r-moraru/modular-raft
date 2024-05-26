@@ -1,6 +1,8 @@
 package network
 
 import (
+	"context"
+
 	"github.com/r-moraru/modular-raft/proto/entries"
 )
 
@@ -14,15 +16,10 @@ const (
 
 type Network interface {
 	GetId() string
-	CheckGreatestTerm() uint64
-	CheckUpdateTimer() bool
-	GetNewLogEntry() *entries.LogEntry
-	GetUpdatedCommitIndex(previousCommitIndex uint64) uint64
 
 	SendRequestVoteAsync(term uint64)
-	SendHeartbeatAsync(peerId string)
-	SendAppendEntryAsync(peerId string, logEntry *entries.LogEntry)
+	SendHeartbeat(peerId string)
+	SendAppendEntry(ctx context.Context, peerId string, logEntry *entries.LogEntry) ResponseStatus
 
-	GotMajorityVote() chan bool
-	GetAppendEntryResponse(index, term uint64, peerId string) ResponseStatus
+	GotMajorityVote(ctx context.Context) chan bool
 }
