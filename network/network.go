@@ -4,9 +4,7 @@ import (
 	"github.com/r-moraru/modular-raft/proto/entries"
 )
 
-type PeerId string
-
-type ResponseStatus int64
+type ResponseStatus uint64
 
 const (
 	Success ResponseStatus = iota
@@ -15,16 +13,16 @@ const (
 )
 
 type Network interface {
-	GetId() PeerId
-	CheckGreatestTerm() int64
+	GetId() string
+	CheckGreatestTerm() uint64
 	CheckUpdateTimer() bool
 	GetNewLogEntry() *entries.LogEntry
-	GetUpdatedCommitIndex(previousCommitIndex int64) int64
+	GetUpdatedCommitIndex(previousCommitIndex uint64) uint64
 
-	SendRequestVoteAsync(term int64)
-	SendHeartbeatAsync(peerId PeerId)
-	SendAppendEntryAsync(peerId PeerId, logEntry *entries.LogEntry)
+	SendRequestVoteAsync(term uint64)
+	SendHeartbeatAsync(peerId string)
+	SendAppendEntryAsync(peerId string, logEntry *entries.LogEntry)
 
 	GotMajorityVote() chan bool
-	GetAppendEntryResponse(index, term int64, peerId PeerId) ResponseStatus
+	GetAppendEntryResponse(index, term uint64, peerId string) ResponseStatus
 }

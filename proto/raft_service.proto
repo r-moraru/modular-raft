@@ -1,10 +1,10 @@
 syntax = "proto3";
-
 package raft_service;
 
-import "google/protobuf/any.proto";
-
 option go_package = "raft_service/";
+
+import "entries.proto";
+
 
 service RaftService {
     rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse) {}
@@ -17,7 +17,7 @@ message AppendEntriesRequest {
     uint64 prevLogIndex = 3;
     uint64 prevLogTerm = 4;
     uint64 leaderCommit = 5;
-    google.protobuf.Any entry = 6;
+    entries.LogEntry entry = 6;
 }
 
 message AppendEntriesResponse {
@@ -27,7 +27,7 @@ message AppendEntriesResponse {
 
 message RequestVoteRequest {
     uint64 term = 1;
-    uint64 candidateId = 2;
+    string candidateId = 2;
     uint64 lastLogIndex = 3;
     uint64 lastLogTerm = 4;
 }

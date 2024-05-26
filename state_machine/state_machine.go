@@ -13,5 +13,5 @@ type ApplyResult struct {
 
 type StateMachine interface {
 	Apply(*any.Any) error
-	WaitForResult(ctx context.Context, clientID string, serializationID int64) chan ApplyResult
+	WaitForResult(ctx context.Context, clientID string, serializationID uint64) chan ApplyResult
 }
