@@ -111,18 +111,9 @@ func (n *Node) runLeaderIteration() {
 	heartbeatTimer := time.NewTimer(time.Duration(n.heartbeat) * time.Millisecond)
 	numReadyToCommitNext := 0
 
-	for peerId, index := range n.nextIndex {
-		if n.matchIndex[peerId] != n.log.GetLastIndex() {
-			logEntry, err := n.log.GetEntry(index)
-			if err != nil {
-				logger.Fatalf("Failed to get entry at index %d from log.", index)
-				continue
-			}
-			n.SendAppendEntry(peerId, logEntry)
-		} else {
-			n.network.SendHeartbeat(peerId)
-		}
+	<-n.SendAppendEntriesToPeers()
 
+	for peerId := range n.nextIndex {
 		if n.commitIndex < n.log.GetLastIndex() {
 			nextCommitLogEntry, err := n.log.GetEntry(n.commitIndex + 1)
 			if err != nil {
@@ -235,4 +226,34 @@ func (n *Node) SendAppendEntry(peerId string, logEntry *entries.LogEntry) {
 	case network.LogInconsistency:
 		n.nextIndex[peerId] -= 1
 	}
+}
+
+func (n *Node) SendAppendEntriesToPeers() chan struct{} {
+	wg := sync.WaitGroup{}
+	for i, index := range n.nextIndex {
+		peerId := i
+		if n.matchIndex[peerId] != n.log.GetLastIndex() {
+			logEntry, err := n.log.GetEntry(index)
+			if err != nil {
+				logger.Fatalf("Failed to get entry at index %d from log.", index)
+				continue
+			}
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				n.SendAppendEntry(peerId, logEntry)
+			}()
+		} else {
+			n.network.SendHeartbeat(peerId)
+		}
+	}
+
+	done := make(chan struct{}, 1)
+	go func() {
+		wg.Wait()
+		done <- struct{}{}
+	}()
+
+	return done
 }
