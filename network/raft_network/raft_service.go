@@ -9,7 +9,7 @@ import (
 
 type RaftService struct {
 	pb.UnimplementedRaftServiceServer
-	raftNode *node.Node
+	raftNode node.Node
 }
 
 func (r *RaftService) buildAppendEntriesResponse(success bool) *pb.AppendEntriesResponse {
