@@ -108,7 +108,9 @@ func (n *Node) runCandidateIteration() {
 }
 
 func (n *Node) runLeaderIteration() {
+	heartbeatTimer := time.NewTimer(time.Duration(n.heartbeat) * time.Millisecond)
 	numReadyToCommitNext := 0
+
 	for peerId, index := range n.nextIndex {
 		if n.matchIndex[peerId] != n.log.GetLastIndex() {
 			logEntry, err := n.log.GetEntry(index)
@@ -136,7 +138,8 @@ func (n *Node) runLeaderIteration() {
 	if numReadyToCommitNext > len(n.matchIndex)/2 {
 		n.commitIndex += 1
 	}
-	time.Sleep(time.Duration(n.heartbeat) * time.Millisecond)
+
+	<-heartbeatTimer.C
 }
 
 func (n *Node) Run(ctx context.Context) {
