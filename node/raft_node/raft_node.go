@@ -21,14 +21,16 @@ type Node struct {
 	electionTimeout uint64
 	heartbeat       uint64
 
-	currentTerm     uint64
-	currentTermLock *sync.RWMutex
-	votedFor        string
-	votedForLock    *sync.RWMutex
-	commitIndex     uint64
-	lastApplied     uint64
-	nextIndex       map[string]uint64
-	matchIndex      map[string]uint64
+	currentTerm         uint64
+	currentTermLock     *sync.RWMutex
+	votedFor            *string
+	votedForLock        *sync.RWMutex
+	currentLeaderID     string
+	currentLeaderIDLock *sync.RWMutex
+	commitIndex         uint64
+	lastApplied         uint64
+	nextIndex           map[string]uint64
+	matchIndex          map[string]uint64
 
 	log          log.Log
 	stateMachine state_machine.StateMachine
@@ -45,18 +47,29 @@ func (n *Node) SetState(newState node.State) {
 	n.stateLock.Lock()
 	defer n.stateLock.Unlock()
 	n.state = newState
+
+	if n.state == node.Follower {
+		n.SetCurrentLeaderID(n.GetVotedFor())
+		n.ClearVotedFor()
+	}
 }
 
 func (n *Node) GetVotedFor() string {
 	n.votedForLock.RLock()
 	defer n.votedForLock.RUnlock()
-	return n.votedFor
+	return *n.votedFor
+}
+
+func (n *Node) ClearVotedFor() {
+	n.votedForLock.Lock()
+	defer n.votedForLock.Unlock()
+	n.votedFor = nil
 }
 
 func (n *Node) SetVotedFor(peerId string) {
 	n.votedForLock.Lock()
 	defer n.votedForLock.Unlock()
-	n.votedFor = peerId
+	n.votedFor = &peerId
 }
 
 func (n *Node) GetCurrentTerm() uint64 {
@@ -71,8 +84,16 @@ func (n *Node) SetCurrentTerm(newTerm uint64) {
 	n.currentTerm = newTerm
 }
 
-func (n *Node) SetVotedForTerm(term uint64, voted bool) {
-	// TODO: implement voted for term
+func (n *Node) GetCurrentLeaderID() string {
+	n.currentLeaderIDLock.RLock()
+	defer n.currentLeaderIDLock.RUnlock()
+	return n.currentLeaderID
+}
+
+func (n *Node) SetCurrentLeaderID(leaderID string) {
+	n.currentLeaderIDLock.Lock()
+	defer n.currentLeaderIDLock.Unlock()
+	n.currentLeaderID = leaderID
 }
 
 func (n *Node) ResetTimer() {
@@ -125,7 +146,6 @@ func (n *Node) runLeaderIteration() {
 			}
 		}
 	}
-
 	if numReadyToCommitNext > len(n.matchIndex)/2 {
 		n.commitIndex += 1
 	}
@@ -169,7 +189,7 @@ func (n *Node) HandleReplicationRequest(ctx context.Context, clientID string, se
 	if n.GetState() != node.Leader {
 		res.ReplicationStatus = node.NotLeader
 		// best effort, might not be leader
-		res.LeaderID = n.GetVotedFor()
+		res.LeaderID = n.GetCurrentLeaderID()
 		return res, nil
 	}
 
@@ -195,7 +215,7 @@ func (n *Node) HandleQueryRequest(ctx context.Context) {
 }
 
 func (n *Node) GetLogLength() uint64 {
-	return 0 // TODO: implement
+	return n.log.GetLength()
 }
 
 func (n *Node) GetTermAtIndex(index uint64) (uint64, error) {
@@ -204,11 +224,6 @@ func (n *Node) GetTermAtIndex(index uint64) (uint64, error) {
 
 func (n *Node) AppendEntry(entry *entries.LogEntry) error {
 	return n.log.InsertLogEntry(entry)
-}
-
-func (n *Node) VotedForTerm(term uint64) bool {
-	// TODO: implement voted for term
-	return false
 }
 
 func (n *Node) GetLastLogIndex() uint64 {

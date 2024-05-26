@@ -2,6 +2,7 @@ package raft_service
 
 import (
 	"context"
+	"log"
 
 	"github.com/r-moraru/modular-raft/node"
 	pb "github.com/r-moraru/modular-raft/proto/raft_service"
@@ -21,26 +22,49 @@ func (r *RaftService) buildRequestVoteResponse(voteGranted bool) *pb.RequestVote
 }
 
 func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRequest) (*pb.AppendEntriesResponse, error) {
-	if r.raftNode.GetCurrentTerm() > req.GetTerm() {
+	if r.raftNode.GetCurrentTerm() >= req.GetTerm() {
 		return r.buildAppendEntriesResponse(false), nil
 	}
+
+	if r.raftNode.GetState() != node.Follower {
+		r.raftNode.SetState(node.Follower)
+		r.raftNode.SetCurrentTerm(req.GetTerm())
+	}
+
+	r.raftNode.ResetTimer()
+
 	if r.raftNode.GetLogLength() <= req.GetPrevLogIndex() {
 		return r.buildAppendEntriesResponse(false), nil
 	}
 	termOfPrevLogIndex, err := r.raftNode.GetTermAtIndex(req.GetPrevLogIndex())
 	if err != nil {
-		// TODO: log errors
+		log.Fatalf("Append entry - unable to get term at index %d from local log.", req.GetPrevLogIndex())
 		return r.buildAppendEntriesResponse(false), err
 	}
 	if termOfPrevLogIndex != req.GetPrevLogTerm() {
 		return r.buildAppendEntriesResponse(false), nil
 	}
 
-	// TODO: respond with success if already applied
-	// TODO: revert to follower if not already, reset timer, update term if greater
+	if req.Entry == nil {
+		// Received heartbeat
+		return r.buildAppendEntriesResponse(true), nil
+	}
+
+	if r.raftNode.GetLastLogIndex() >= req.Entry.Index {
+		termOfLogIndex, err := r.raftNode.GetTermAtIndex(req.Entry.Index)
+		if err != nil {
+			log.Fatalf("Append entry - unable to get term at index %d from local log.", req.Entry.Index)
+			return r.buildAppendEntriesResponse(false), err
+		}
+		if termOfLogIndex == req.Entry.Term {
+			// already appended
+			return r.buildAppendEntriesResponse(true), nil
+		}
+	}
 
 	err = r.raftNode.AppendEntry(req.Entry)
 	if err != nil {
+		log.Fatal("Append entry - failed to append entry.")
 		return r.buildAppendEntriesResponse(false), err
 	}
 
