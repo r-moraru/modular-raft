@@ -5,6 +5,7 @@ import (
 	logger "log"
 	"time"
 
+	"github.com/golang/protobuf/ptypes/any"
 	"github.com/r-moraru/modular-raft/log"
 	"github.com/r-moraru/modular-raft/network"
 	"github.com/r-moraru/modular-raft/state_machine"
@@ -16,6 +17,16 @@ const (
 	Leader State = iota
 	Follower
 	Candidate
+)
+
+type ReplicationStatus int64
+
+const (
+	NotLeader ReplicationStatus = iota
+	NotTracked
+	InProgress
+	Replicated
+	ApplyError
 )
 
 type Node struct {
@@ -36,6 +47,12 @@ type Node struct {
 	network      network.Network
 }
 
+type ReplicationResponse struct {
+	ReplicationStatus ReplicationStatus
+	LeaderID          network.PeerId
+	Result            *any.Any
+}
+
 func (n *Node) resetTimer() {
 	n.timer.Reset(time.Duration(n.electionTimeout) * time.Millisecond)
 }
@@ -46,7 +63,7 @@ func (n *Node) runFollowerIteration() {
 		n.log.InsertLogEntry(entry)
 	}
 
-	n.commitIndex = n.network.UpdateCommitIndex(n.commitIndex)
+	n.commitIndex = n.network.GetUpdatedCommitIndex(n.commitIndex)
 
 	select {
 	case <-n.timer.C:
@@ -65,23 +82,22 @@ func (n *Node) runCandidateIteration() {
 	// TODO(Optional): also check network for received AppendEntriesRPC from new leader
 	case <-n.network.GotMajorityVote():
 		n.state = Leader
+		// TODO: commit blank no-op to prevent stale reads
 	case <-n.timer.C:
 		return
 	}
 }
 
 func (n *Node) runLeaderIteration() {
-	request := n.network.GetRequest()
-	if request != nil {
-		n.log.AppendEntry(n.currentTerm, request)
-	}
-
 	numReadyToCommitNext := 0
 	for peerId, index := range n.nextIndex {
-		peerResponse := n.network.GetPeerResponse(index, n.log.GetTermAtIndex(index), peerId)
-		switch peerResponse {
-		case network.NotReceived:
+		termAtPeerIndex, err := n.log.GetTermAtIndex(index)
+		if err != nil {
+			logger.Fatalf("Failed to get term at index %d from log.", index)
 			continue
+		}
+		peerResponse := n.network.GetAppendEntryResponse(index, termAtPeerIndex, peerId)
+		switch peerResponse {
 		case network.Success:
 			n.matchIndex[peerId] = n.nextIndex[peerId]
 			n.nextIndex[peerId] += 1
@@ -89,20 +105,30 @@ func (n *Node) runLeaderIteration() {
 			n.nextIndex[peerId] -= 1
 		}
 
-		if request == nil {
-			n.network.SendHeartbeatAsync(peerId)
-		} else {
-			n.network.SendAppendEntryAsync(peerId, n.log.GetEntry(index))
+		if n.matchIndex[peerId] != n.log.GetLastIndex() {
+			logEntry, err := n.log.GetEntry(index)
+			if err != nil {
+				logger.Fatalf("Failed to get entry at index %d from log.", index)
+				continue
+			}
+			n.network.SendAppendEntryAsync(peerId, logEntry)
 		}
 
-		if n.matchIndex[peerId] > n.commitIndex && n.log.GetEntry(n.commitIndex+1).Term == n.currentTerm {
-			numReadyToCommitNext += 1
-		}
-		if numReadyToCommitNext > len(n.matchIndex) {
-			n.commitIndex += 1
+		if n.commitIndex < n.log.GetLastIndex() {
+			nextCommitLogEntry, err := n.log.GetEntry(n.commitIndex + 1)
+			if err != nil {
+				logger.Fatalf("Failed to get entry for next commit index %d from log.", n.commitIndex+1)
+				continue
+			}
+			if n.matchIndex[peerId] > n.commitIndex && nextCommitLogEntry.Term == n.currentTerm {
+				numReadyToCommitNext += 1
+			}
 		}
 	}
 
+	if numReadyToCommitNext > len(n.matchIndex) {
+		n.commitIndex += 1
+	}
 	time.Sleep(time.Duration(n.heartbeat) * time.Millisecond)
 }
 
@@ -130,8 +156,12 @@ func (n *Node) Run(ctx context.Context) {
 			}
 
 			if n.commitIndex > n.lastApplied {
-				logEntry := n.log.GetEntry(n.lastApplied + 1)
-				err := n.stateMachine.Apply(logEntry.Entry)
+				logEntry, err := n.log.GetEntry(n.lastApplied + 1)
+				if err != nil {
+					logger.Fatalf("Failed to get next entry to apply at index %d from log.", n.lastApplied+1)
+					continue
+				}
+				err = n.stateMachine.Apply(logEntry.Entry)
 				if err != nil {
 					logger.Fatalf("State machine unable to apply entry at index %d, term %d.", logEntry.Index, logEntry.Term)
 				}
@@ -139,4 +169,35 @@ func (n *Node) Run(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (n *Node) HandleReplicationRequest(ctx context.Context, clientID string, serializationID int64, entry *any.Any) (ReplicationResponse, error) {
+	// TODO: implement setters and getters with read write mutex for state, currentTerm, votedFor
+	res := ReplicationResponse{}
+	if n.state != Leader {
+		res.ReplicationStatus = NotLeader
+		// best effort, might not be leader
+		res.LeaderID = n.votedFor
+		return res, nil
+	}
+
+	n.log.AppendEntry(n.currentTerm, clientID, serializationID, entry)
+
+	select {
+	case <-ctx.Done():
+		return res, nil
+	case result := <-n.stateMachine.WaitForResult(ctx, clientID, serializationID):
+		if result.Error != nil {
+			logger.Fatalf("State machine returned error for clientID %s, serializationID %d.", clientID, serializationID)
+			res.ReplicationStatus = ApplyError
+			return res, nil
+		}
+		res.Result = result.Result
+		res.ReplicationStatus = Replicated
+		return res, nil
+	}
+}
+
+func (n *Node) HandleQueryRequest(ctx context.Context) {
+
 }

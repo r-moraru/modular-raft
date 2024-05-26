@@ -8,5 +8,7 @@ import "google/protobuf/any.proto";
 message LogEntry {
     int64 index = 1;
     int64 term = 2;
-    google.protobuf.Any entry = 3;
+    string clientID = 3;
+    int64 serializationID = 4;
+    google.protobuf.Any entry = 5;
 }

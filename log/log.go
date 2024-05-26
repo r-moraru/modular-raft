@@ -6,10 +6,11 @@ import (
 )
 
 type Log interface {
-	GetEntry(index int64) *entries.LogEntry
-	GetTermAtIndex(index int64) int64
-	InsertLogEntry(*entries.LogEntry)
-	AppendEntry(term int64, entry *any.Any)
+	GetLastIndex() int64
+	GetEntry(index int64) (*entries.LogEntry, error)
+	GetTermAtIndex(index int64) (int64, error)
+	InsertLogEntry(*entries.LogEntry) error
+	AppendEntry(term int64, clientID string, serializationID int64, entry *any.Any) error
 }
 
 // Implementation:

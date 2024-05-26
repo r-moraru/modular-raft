@@ -1,7 +1,6 @@
 package network
 
 import (
-	"github.com/golang/protobuf/ptypes/any"
 	"github.com/r-moraru/modular-raft/proto/entries"
 )
 
@@ -16,15 +15,16 @@ const (
 )
 
 type Network interface {
+	GetId() PeerId
 	CheckGreatestTerm() int64
 	CheckUpdateTimer() bool
-	UpdateCommitIndex(previousCommitIndex int64) int64
 	GetNewLogEntry() *entries.LogEntry
-	GetId() PeerId
+	GetUpdatedCommitIndex(previousCommitIndex int64) int64
+
 	SendRequestVoteAsync(term int64)
-	GotMajorityVote() chan bool
-	GetRequest() *any.Any
 	SendHeartbeatAsync(peerId PeerId)
 	SendAppendEntryAsync(peerId PeerId, logEntry *entries.LogEntry)
-	GetPeerResponse(index, term int64, peerId PeerId) ResponseStatus
+
+	GotMajorityVote() chan bool
+	GetAppendEntryResponse(index, term int64, peerId PeerId) ResponseStatus
 }
