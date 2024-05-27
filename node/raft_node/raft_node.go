@@ -14,26 +14,60 @@ import (
 )
 
 type Node struct {
-	state           node.State
-	stateLock       *sync.RWMutex
-	timer           time.Timer
+	state     node.State
+	stateLock *sync.RWMutex
+
+	timer           *time.Timer
 	electionTimeout uint64
 	heartbeat       uint64
 
-	currentTerm         uint64
-	currentTermLock     *sync.RWMutex
+	// Election state
 	votedFor            *string
 	votedForLock        *sync.RWMutex
 	currentLeaderID     string
 	currentLeaderIDLock *sync.RWMutex
-	commitIndex         uint64
-	lastApplied         uint64
-	nextIndex           sync.Map
-	matchIndex          sync.Map
+
+	currentTerm     uint64
+	currentTermLock *sync.RWMutex
+	commitIndex     uint64
+	commitIndexLock *sync.RWMutex
+	lastApplied     uint64
+
+	// Leader bookkeeping
+	nextIndex  sync.Map
+	matchIndex sync.Map
 
 	log          log.Log
 	stateMachine state_machine.StateMachine
 	network      network.Network
+}
+
+func New(electionTimeout uint64, heartbeat uint64, log log.Log, stateMachine state_machine.StateMachine, network network.Network) (*Node, error) {
+	currentTerm, err := log.GetTermAtIndex(log.GetLastIndex())
+	if err != nil {
+		return nil, err
+	}
+	return &Node{
+		state:               node.Follower,
+		stateLock:           &sync.RWMutex{},
+		timer:               time.NewTimer(time.Duration(0)),
+		electionTimeout:     electionTimeout,
+		heartbeat:           heartbeat,
+		currentTerm:         currentTerm,
+		currentTermLock:     &sync.RWMutex{},
+		votedFor:            nil,
+		votedForLock:        &sync.RWMutex{},
+		currentLeaderID:     network.GetId(),
+		currentLeaderIDLock: &sync.RWMutex{},
+		commitIndex:         stateMachine.GetLastApplied(),
+		commitIndexLock:     &sync.RWMutex{},
+		lastApplied:         stateMachine.GetLastApplied(),
+		nextIndex:           sync.Map{},
+		matchIndex:          sync.Map{},
+		log:                 log,
+		stateMachine:        stateMachine,
+		network:             network,
+	}, nil
 }
 
 func (n *Node) GetState() node.State {
@@ -93,6 +127,18 @@ func (n *Node) SetCurrentLeaderID(leaderID string) {
 	n.currentLeaderIDLock.Lock()
 	defer n.currentLeaderIDLock.Unlock()
 	n.currentLeaderID = leaderID
+}
+
+func (n *Node) GetCommitIndex() uint64 {
+	n.commitIndexLock.RLock()
+	defer n.commitIndexLock.RUnlock()
+	return n.commitIndex
+}
+
+func (n *Node) SetCommitIndex(commitIndex uint64) {
+	n.commitIndexLock.Lock()
+	defer n.commitIndexLock.Unlock()
+	n.commitIndex = commitIndex
 }
 
 func (n *Node) ResetTimer() {

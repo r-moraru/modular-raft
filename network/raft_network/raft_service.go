@@ -64,6 +64,10 @@ func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRe
 		}
 	}
 
+	if req.GetLeaderCommit() > r.raftNode.GetCommitIndex() {
+		r.raftNode.SetCommitIndex(min(req.GetLeaderCommit(), req.GetEntry().GetIndex()))
+	}
+
 	err = r.log.InsertLogEntry(req.Entry)
 	if err != nil {
 		logger.Fatal("Append entry - failed to append entry.")
