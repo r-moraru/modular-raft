@@ -109,6 +109,13 @@ func (n *Node) runFollowerIteration() {
 	}
 }
 
+func (n *Node) resetLeaderBookkeeping() {
+	for _, peerId := range n.network.GetPeerList() {
+		n.matchIndex.Store(peerId, 0)
+		n.nextIndex.Store(peerId, n.log.GetLastIndex())
+	}
+}
+
 func (n *Node) runCandidateIteration() {
 	n.SetCurrentTerm(n.GetCurrentTerm() + 1)
 	n.SetVotedFor(n.network.GetId())
@@ -121,8 +128,8 @@ func (n *Node) runCandidateIteration() {
 	// TODO(Optional): also check network for received AppendEntriesRPC from new leader
 	case <-n.network.GotMajorityVote(ctx):
 		n.SetState(node.Leader)
+		n.resetLeaderBookkeeping()
 		// TODO: commit blank no-op to prevent stale reads
-		// TODO: reset leader bookkeeping
 	case <-n.timer.C:
 		return
 	}

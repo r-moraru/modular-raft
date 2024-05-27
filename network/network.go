@@ -16,6 +16,7 @@ const (
 
 type Network interface {
 	GetId() string
+	GetPeerList() []string
 
 	SendRequestVoteAsync(term uint64)
 	SendHeartbeat(peerId string)
