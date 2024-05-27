@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	anypb "github.com/golang/protobuf/ptypes/any"
 	"github.com/r-moraru/modular-raft/log"
 	"github.com/r-moraru/modular-raft/network"
 	"github.com/r-moraru/modular-raft/node"
@@ -195,36 +194,6 @@ func (n *Node) Run(ctx context.Context) {
 			}
 		}
 	}
-}
-
-func (n *Node) HandleReplicationRequest(ctx context.Context, clientID string, serializationID uint64, entry *anypb.Any) (node.ReplicationResponse, error) {
-	res := node.ReplicationResponse{}
-	if n.GetState() != node.Leader {
-		res.ReplicationStatus = node.NotLeader
-		// best effort, might not be leader
-		res.LeaderID = n.GetCurrentLeaderID()
-		return res, nil
-	}
-
-	n.log.AppendEntry(n.GetCurrentTerm(), clientID, serializationID, entry)
-
-	select {
-	case <-ctx.Done():
-		return res, nil
-	case result := <-n.stateMachine.WaitForResult(ctx, clientID, serializationID):
-		if result.Error != nil {
-			logger.Fatalf("State machine returned error for clientID %s, serializationID %d.", clientID, serializationID)
-			res.ReplicationStatus = node.ApplyError
-			return res, nil
-		}
-		res.Result = result.Result
-		res.ReplicationStatus = node.Replicated
-		return res, nil
-	}
-}
-
-func (n *Node) HandleQueryRequest(ctx context.Context) {
-	// TODO: implement query request handler
 }
 
 func (n *Node) GetLogLength() uint64 {

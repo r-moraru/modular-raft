@@ -41,11 +41,9 @@ type Node interface {
 	SetVotedForTerm(term uint64, voted bool)
 	VotedForTerm(term uint64) bool
 	ResetTimer()
+	GetCurrentLeaderID() string
 
 	Run(ctx context.Context)
-
-	HandleReplicationRequest(ctx context.Context, clientID string, serializationID uint64, entry *any.Any) (ReplicationResponse, error)
-	HandleQueryRequest(ctx context.Context)
 
 	GetLogLength() uint64
 	GetLastLogIndex() uint64
