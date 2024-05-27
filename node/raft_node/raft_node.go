@@ -196,22 +196,6 @@ func (n *Node) Run(ctx context.Context) {
 	}
 }
 
-func (n *Node) GetLogLength() uint64 {
-	return n.log.GetLength()
-}
-
-func (n *Node) GetTermAtIndex(index uint64) (uint64, error) {
-	return n.log.GetTermAtIndex(index)
-}
-
-func (n *Node) AppendEntry(entry *entries.LogEntry) error {
-	return n.log.InsertLogEntry(entry)
-}
-
-func (n *Node) GetLastLogIndex() uint64 {
-	return n.log.GetLastIndex()
-}
-
 func (n *Node) SendAppendEntry(peerId string, logEntry *entries.LogEntry) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(n.heartbeat)*time.Millisecond)
 	defer cancel()

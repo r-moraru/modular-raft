@@ -2,8 +2,9 @@ package raft_service
 
 import (
 	"context"
-	"log"
+	logger "log"
 
+	"github.com/r-moraru/modular-raft/log"
 	"github.com/r-moraru/modular-raft/node"
 	pb "github.com/r-moraru/modular-raft/proto/raft_service"
 )
@@ -11,6 +12,7 @@ import (
 type RaftService struct {
 	pb.UnimplementedRaftServiceServer
 	raftNode node.Node
+	log      log.Log
 }
 
 func (r *RaftService) buildAppendEntriesResponse(success bool) *pb.AppendEntriesResponse {
@@ -33,12 +35,12 @@ func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRe
 
 	r.raftNode.ResetTimer()
 
-	if r.raftNode.GetLogLength() <= req.GetPrevLogIndex() {
+	if r.log.GetLength() <= req.GetPrevLogIndex() {
 		return r.buildAppendEntriesResponse(false), nil
 	}
-	termOfPrevLogIndex, err := r.raftNode.GetTermAtIndex(req.GetPrevLogIndex())
+	termOfPrevLogIndex, err := r.log.GetTermAtIndex(req.GetPrevLogIndex())
 	if err != nil {
-		log.Fatalf("Append entry - unable to get term at index %d from local log.", req.GetPrevLogIndex())
+		logger.Fatalf("Append entry - unable to get term at index %d from local log.", req.GetPrevLogIndex())
 		return r.buildAppendEntriesResponse(false), err
 	}
 	if termOfPrevLogIndex != req.GetPrevLogTerm() {
@@ -50,10 +52,10 @@ func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRe
 		return r.buildAppendEntriesResponse(true), nil
 	}
 
-	if r.raftNode.GetLastLogIndex() >= req.Entry.Index {
-		termOfLogIndex, err := r.raftNode.GetTermAtIndex(req.Entry.Index)
+	if r.log.GetLastIndex() >= req.Entry.Index {
+		termOfLogIndex, err := r.log.GetTermAtIndex(req.Entry.Index)
 		if err != nil {
-			log.Fatalf("Append entry - unable to get term at index %d from local log.", req.Entry.Index)
+			logger.Fatalf("Append entry - unable to get term at index %d from local log.", req.Entry.Index)
 			return r.buildAppendEntriesResponse(false), err
 		}
 		if termOfLogIndex == req.Entry.Term {
@@ -62,9 +64,9 @@ func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRe
 		}
 	}
 
-	err = r.raftNode.AppendEntry(req.Entry)
+	err = r.log.InsertLogEntry(req.Entry)
 	if err != nil {
-		log.Fatal("Append entry - failed to append entry.")
+		logger.Fatal("Append entry - failed to append entry.")
 		return r.buildAppendEntriesResponse(false), err
 	}
 
@@ -80,7 +82,7 @@ func (r *RaftService) RequestVote(ctx context.Context, req *pb.RequestVoteReques
 		return r.buildRequestVoteResponse(false), nil
 	}
 
-	if req.GetLastLogIndex() < r.raftNode.GetLastLogIndex() || req.GetLastLogTerm() < r.raftNode.GetCurrentTerm() {
+	if req.GetLastLogIndex() < r.log.GetLastIndex() || req.GetLastLogTerm() < r.raftNode.GetCurrentTerm() {
 		return r.buildRequestVoteResponse(false), nil
 	}
 
