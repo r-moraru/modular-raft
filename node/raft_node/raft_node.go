@@ -158,7 +158,8 @@ func (n *Node) runLeaderIteration() {
 		return true
 	})
 
-	if numReadyToCommitNext > numPeers/2 {
+	// Add one to include self
+	if numReadyToCommitNext+1 > (numPeers+1)/2 {
 		n.commitIndex += 1
 	}
 
