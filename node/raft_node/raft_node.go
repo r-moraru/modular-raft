@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/ptypes/any"
+	anypb "github.com/golang/protobuf/ptypes/any"
 	"github.com/r-moraru/modular-raft/log"
 	"github.com/r-moraru/modular-raft/network"
 	"github.com/r-moraru/modular-raft/node"
@@ -29,8 +29,8 @@ type Node struct {
 	currentLeaderIDLock *sync.RWMutex
 	commitIndex         uint64
 	lastApplied         uint64
-	nextIndex           map[string]uint64
-	matchIndex          map[string]uint64
+	nextIndex           sync.Map
+	matchIndex          sync.Map
 
 	log          log.Log
 	stateMachine state_machine.StateMachine
@@ -130,23 +130,28 @@ func (n *Node) runCandidateIteration() {
 
 func (n *Node) runLeaderIteration() {
 	heartbeatTimer := time.NewTimer(time.Duration(n.heartbeat) * time.Millisecond)
-	numReadyToCommitNext := 0
 
 	<-n.SendAppendEntriesToPeers()
 
-	for peerId := range n.nextIndex {
+	numReadyToCommitNext := 0
+	numPeers := 0
+	n.matchIndex.Range(func(key any, value any) bool {
+		numPeers += 1
+		peerMatchIndex := value.(uint64)
 		if n.commitIndex < n.log.GetLastIndex() {
-			nextCommitLogEntry, err := n.log.GetEntry(n.commitIndex + 1)
+			nextCommitIndexTerm, err := n.log.GetTermAtIndex(n.commitIndex + 1)
 			if err != nil {
 				logger.Fatalf("Failed to get entry for next commit index %d from log.", n.commitIndex+1)
-				continue
+				return true
 			}
-			if n.matchIndex[peerId] > n.commitIndex && nextCommitLogEntry.Term == n.GetCurrentTerm() {
+			if peerMatchIndex > n.commitIndex && nextCommitIndexTerm == n.GetCurrentTerm() {
 				numReadyToCommitNext += 1
 			}
 		}
-	}
-	if numReadyToCommitNext > len(n.matchIndex)/2 {
+		return true
+	})
+
+	if numReadyToCommitNext > numPeers/2 {
 		n.commitIndex += 1
 	}
 
@@ -184,7 +189,7 @@ func (n *Node) Run(ctx context.Context) {
 	}
 }
 
-func (n *Node) HandleReplicationRequest(ctx context.Context, clientID string, serializationID uint64, entry *any.Any) (node.ReplicationResponse, error) {
+func (n *Node) HandleReplicationRequest(ctx context.Context, clientID string, serializationID uint64, entry *anypb.Any) (node.ReplicationResponse, error) {
 	res := node.ReplicationResponse{}
 	if n.GetState() != node.Leader {
 		res.ReplicationStatus = node.NotLeader
@@ -234,24 +239,40 @@ func (n *Node) SendAppendEntry(peerId string, logEntry *entries.LogEntry) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(n.heartbeat)*time.Millisecond)
 	defer cancel()
 	responseStatus := n.network.SendAppendEntry(ctx, peerId, logEntry)
+	value, loaded := n.nextIndex.Load(peerId)
+	if !loaded {
+		logger.Fatalf("Bookkeeping error - peer %s not found.", peerId)
+		return
+	}
+	nextIndex, ok := value.(uint64)
+	if !ok {
+		logger.Fatal("Bookkeeping error - next index value is not uint64.")
+	}
 	switch responseStatus {
 	case network.Success:
-		n.matchIndex[peerId] = n.nextIndex[peerId]
-		n.nextIndex[peerId] += 1
+		n.matchIndex.Store(peerId, nextIndex)
+		n.nextIndex.Store(peerId, nextIndex+1)
 	case network.LogInconsistency:
-		n.nextIndex[peerId] -= 1
+		n.nextIndex.Store(peerId, nextIndex-1)
 	}
 }
 
 func (n *Node) SendAppendEntriesToPeers() chan struct{} {
 	wg := sync.WaitGroup{}
-	for i, index := range n.nextIndex {
-		peerId := i
-		if n.matchIndex[peerId] != n.log.GetLastIndex() {
-			logEntry, err := n.log.GetEntry(index)
+
+	n.nextIndex.Range(func(key any, value any) bool {
+		peerId := key.(string)
+		peerNextIndex := value.(uint64)
+		peerMatchIndex, found := n.matchIndex.Load(peerId)
+		if !found {
+			logger.Fatalf("Leader bookkeeping mismatch: peer %s from nextIndex not found in matchIndex.", peerId)
+			return true
+		}
+		if peerMatchIndex != n.log.GetLastIndex() {
+			logEntry, err := n.log.GetEntry(peerNextIndex)
 			if err != nil {
-				logger.Fatalf("Failed to get entry at index %d from log.", index)
-				continue
+				logger.Fatalf("Failed to get entry at index %d from log.", peerNextIndex)
+				return true
 			}
 
 			wg.Add(1)
@@ -262,7 +283,9 @@ func (n *Node) SendAppendEntriesToPeers() chan struct{} {
 		} else {
 			n.network.SendHeartbeat(peerId)
 		}
-	}
+
+		return true
+	})
 
 	done := make(chan struct{}, 1)
 	go func() {
