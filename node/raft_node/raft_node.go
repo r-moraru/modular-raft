@@ -87,6 +87,12 @@ func (n *Node) SetState(newState node.State) {
 	}
 }
 
+func (n *Node) VotedForTerm(term uint64) bool {
+	n.votedForLock.RLock()
+	defer n.votedForLock.RUnlock()
+	return n.votedFor != nil
+}
+
 func (n *Node) GetVotedFor() string {
 	n.votedForLock.RLock()
 	defer n.votedForLock.RUnlock()
@@ -173,6 +179,7 @@ func (n *Node) runCandidateIteration() {
 	// TODO(Optional): also check network for received AppendEntriesRPC from new leader
 	case <-n.network.GotMajorityVote(ctx):
 		n.SetState(node.Leader)
+		n.ClearVotedFor()
 		n.resetLeaderBookkeeping()
 		// TODO: commit blank no-op to prevent stale reads
 	case <-n.timer.C:
@@ -211,33 +218,37 @@ func (n *Node) runLeaderIteration() {
 	<-heartbeatTimer.C
 }
 
+func (n *Node) runIteration() {
+	switch n.GetState() {
+	case node.Follower:
+		n.runFollowerIteration()
+	case node.Candidate:
+		n.runCandidateIteration()
+	case node.Leader:
+		n.runLeaderIteration()
+	}
+
+	if n.commitIndex > n.lastApplied {
+		logEntry, err := n.log.GetEntry(n.lastApplied + 1)
+		if err != nil {
+			logger.Fatalf("Failed to get next entry to apply at index %d from log.", n.lastApplied+1)
+			return
+		}
+		err = n.stateMachine.Apply(logEntry.Entry)
+		if err != nil {
+			logger.Fatalf("State machine unable to apply entry at index %d, term %d.", logEntry.Index, logEntry.Term)
+		}
+		n.lastApplied += 1
+	}
+}
+
 func (n *Node) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
-			switch n.GetState() {
-			case node.Follower:
-				n.runFollowerIteration()
-			case node.Candidate:
-				n.runCandidateIteration()
-			case node.Leader:
-				n.runLeaderIteration()
-			}
-
-			if n.commitIndex > n.lastApplied {
-				logEntry, err := n.log.GetEntry(n.lastApplied + 1)
-				if err != nil {
-					logger.Fatalf("Failed to get next entry to apply at index %d from log.", n.lastApplied+1)
-					continue
-				}
-				err = n.stateMachine.Apply(logEntry.Entry)
-				if err != nil {
-					logger.Fatalf("State machine unable to apply entry at index %d, term %d.", logEntry.Index, logEntry.Term)
-				}
-				n.lastApplied += 1
-			}
+			n.runIteration()
 		}
 	}
 }

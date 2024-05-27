@@ -78,7 +78,7 @@ func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRe
 }
 
 func (r *RaftService) RequestVote(ctx context.Context, req *pb.RequestVoteRequest) (*pb.RequestVoteResponse, error) {
-	if req.GetTerm() < r.raftNode.GetCurrentTerm() {
+	if req.GetTerm() <= r.raftNode.GetCurrentTerm() {
 		return r.buildRequestVoteResponse(false), nil
 	}
 
@@ -91,7 +91,6 @@ func (r *RaftService) RequestVote(ctx context.Context, req *pb.RequestVoteReques
 	}
 
 	r.raftNode.SetCurrentTerm(req.GetTerm())
-	r.raftNode.SetVotedForTerm(req.GetTerm(), true)
 	r.raftNode.SetVotedFor(req.GetCandidateId())
 
 	return r.buildRequestVoteResponse(true), nil
