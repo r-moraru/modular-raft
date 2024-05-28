@@ -38,10 +38,12 @@ type Node interface {
 	SetVotedFor(peerId string)
 	GetCurrentTerm() uint64
 	GetCommitIndex() uint64
+	SetCurrentLeaderId(leaderId string)
 	SetCommitIndex(commitIndex uint64)
 	SetCurrentTerm(newTerm uint64)
 	SetVotedForTerm(term uint64, voted bool)
-	VotedForTerm(term uint64) bool
+	VotedForTerm() bool
+	ClearVotedFor()
 	ResetTimer()
 	GetCurrentLeaderID() string
 

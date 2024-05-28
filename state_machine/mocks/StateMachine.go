@@ -5,8 +5,7 @@ package mocks
 import (
 	context "context"
 
-	anypb "google.golang.org/protobuf/types/known/anypb"
-
+	entries "github.com/r-moraru/modular-raft/proto/entries"
 	mock "github.com/stretchr/testify/mock"
 
 	state_machine "github.com/r-moraru/modular-raft/state_machine"
@@ -26,7 +25,7 @@ func (_m *StateMachine) EXPECT() *StateMachine_Expecter {
 }
 
 // Apply provides a mock function with given fields: _a0
-func (_m *StateMachine) Apply(_a0 *anypb.Any) error {
+func (_m *StateMachine) Apply(_a0 *entries.LogEntry) error {
 	ret := _m.Called(_a0)
 
 	if len(ret) == 0 {
@@ -34,7 +33,7 @@ func (_m *StateMachine) Apply(_a0 *anypb.Any) error {
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*anypb.Any) error); ok {
+	if rf, ok := ret.Get(0).(func(*entries.LogEntry) error); ok {
 		r0 = rf(_a0)
 	} else {
 		r0 = ret.Error(0)
@@ -49,14 +48,14 @@ type StateMachine_Apply_Call struct {
 }
 
 // Apply is a helper method to define mock.On call
-//   - _a0 *anypb.Any
+//   - _a0 *entries.LogEntry
 func (_e *StateMachine_Expecter) Apply(_a0 interface{}) *StateMachine_Apply_Call {
 	return &StateMachine_Apply_Call{Call: _e.mock.On("Apply", _a0)}
 }
 
-func (_c *StateMachine_Apply_Call) Run(run func(_a0 *anypb.Any)) *StateMachine_Apply_Call {
+func (_c *StateMachine_Apply_Call) Run(run func(_a0 *entries.LogEntry)) *StateMachine_Apply_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(*anypb.Any))
+		run(args[0].(*entries.LogEntry))
 	})
 	return _c
 }
@@ -66,7 +65,7 @@ func (_c *StateMachine_Apply_Call) Return(_a0 error) *StateMachine_Apply_Call {
 	return _c
 }
 
-func (_c *StateMachine_Apply_Call) RunAndReturn(run func(*anypb.Any) error) *StateMachine_Apply_Call {
+func (_c *StateMachine_Apply_Call) RunAndReturn(run func(*entries.LogEntry) error) *StateMachine_Apply_Call {
 	_c.Call.Return(run)
 	return _c
 }

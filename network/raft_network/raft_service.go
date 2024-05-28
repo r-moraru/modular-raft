@@ -28,8 +28,11 @@ func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRe
 		return r.buildAppendEntriesResponse(false), nil
 	}
 
+	r.raftNode.SetCurrentLeaderId(req.LeaderId)
+
 	if r.raftNode.GetState() != node.Follower {
 		r.raftNode.SetState(node.Follower)
+		r.raftNode.ClearVotedFor()
 		r.raftNode.SetCurrentTerm(req.GetTerm())
 	}
 
@@ -82,7 +85,7 @@ func (r *RaftService) RequestVote(ctx context.Context, req *pb.RequestVoteReques
 		return r.buildRequestVoteResponse(false), nil
 	}
 
-	if r.raftNode.VotedForTerm(req.GetTerm()) && string(r.raftNode.GetVotedFor()) != req.GetCandidateId() {
+	if r.raftNode.VotedForTerm() && string(r.raftNode.GetVotedFor()) != req.GetCandidateId() {
 		return r.buildRequestVoteResponse(false), nil
 	}
 

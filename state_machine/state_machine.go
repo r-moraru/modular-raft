@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/golang/protobuf/ptypes/any"
+	"github.com/r-moraru/modular-raft/proto/entries"
 )
 
 type ApplyResult struct {
@@ -12,7 +13,7 @@ type ApplyResult struct {
 }
 
 type StateMachine interface {
-	Apply(*any.Any) error
+	Apply(*entries.LogEntry) error
 	GetLastApplied() uint64
 	WaitForResult(ctx context.Context, clientID string, serializationID uint64) chan ApplyResult
 }

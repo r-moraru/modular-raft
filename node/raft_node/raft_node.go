@@ -80,14 +80,9 @@ func (n *Node) SetState(newState node.State) {
 	n.stateLock.Lock()
 	defer n.stateLock.Unlock()
 	n.state = newState
-
-	if n.state == node.Follower {
-		n.SetCurrentLeaderID(n.GetVotedFor())
-		n.ClearVotedFor()
-	}
 }
 
-func (n *Node) VotedForTerm(term uint64) bool {
+func (n *Node) VotedForTerm() bool {
 	n.votedForLock.RLock()
 	defer n.votedForLock.RUnlock()
 	return n.votedFor != nil
@@ -148,6 +143,7 @@ func (n *Node) SetCommitIndex(commitIndex uint64) {
 }
 
 func (n *Node) ResetTimer() {
+	// TODO: randomize timer around electionTimeout range
 	n.timer.Reset(time.Duration(n.electionTimeout) * time.Millisecond)
 }
 
@@ -177,11 +173,16 @@ func (n *Node) runCandidateIteration() {
 	defer cancel()
 	select {
 	// TODO(Optional): also check network for received AppendEntriesRPC from new leader
-	case <-n.network.GotMajorityVote(ctx):
-		n.SetState(node.Leader)
+	case gotVoted := <-n.network.GotMajorityVote(ctx):
 		n.ClearVotedFor()
-		n.resetLeaderBookkeeping()
-		// TODO: commit blank no-op to prevent stale reads
+		if gotVoted {
+			n.SetState(node.Leader)
+			n.SetCurrentLeaderID(n.network.GetId())
+			n.resetLeaderBookkeeping()
+			// TODO: commit blank no-op to prevent stale reads
+		} else {
+			n.SetState(node.Follower)
+		}
 	case <-n.timer.C:
 		return
 	}
@@ -234,7 +235,7 @@ func (n *Node) runIteration() {
 			logger.Fatalf("Failed to get next entry to apply at index %d from log.", n.lastApplied+1)
 			return
 		}
-		err = n.stateMachine.Apply(logEntry.Entry)
+		err = n.stateMachine.Apply(logEntry)
 		if err != nil {
 			logger.Fatalf("State machine unable to apply entry at index %d, term %d.", logEntry.Index, logEntry.Term)
 		}
