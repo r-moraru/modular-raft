@@ -177,7 +177,7 @@ func TestAppliesCommittedEntriesNotYetApplied(t *testing.T) {
 	stateMachine.EXPECT().Apply(mock.Anything).Return(nil).Once()
 	network.EXPECT().GetId().Return(nodeId).Once()
 
-	raftNode, _ := New(100, 50, log, stateMachine, network)
+	raftNode, _ := New(10, 5, log, stateMachine, network)
 	raftNode.SetCommitIndex(raftNode.GetCommitIndex() + 1)
 	raftNode.runIteration()
 
@@ -185,5 +185,67 @@ func TestAppliesCommittedEntriesNotYetApplied(t *testing.T) {
 	assert.Equal(t, uint64(13), raftNode.lastApplied)
 }
 
-// TODO: test mutliple follower iterations
+func TestMultipleFollowerIterations(t *testing.T) {
+	lastIndex := uint64(16)
+	lastTerm := uint64(4)
+	lastAppliedIndex := uint64(12)
+	nodeId := "node1"
+	log := log_mocks.NewLog(t)
+	stateMachine := state_machine_mocks.NewStateMachine(t)
+	network := network_mocks.NewNetwork(t)
+	entries := []*entries.LogEntry{
+		{
+			Index:           13,
+			Term:            3,
+			ClientID:        "client-id",
+			SerializationID: 12345,
+		},
+		{
+			Index:           14,
+			Term:            3,
+			ClientID:        "client-id",
+			SerializationID: 12346,
+		},
+		{
+			Index:           15,
+			Term:            3,
+			ClientID:        "client-id",
+			SerializationID: 12347,
+		},
+		{
+			Index:           16,
+			Term:            3,
+			ClientID:        "client-id",
+			SerializationID: 12348,
+		},
+	}
+
+	log.EXPECT().GetLastIndex().Return(lastIndex).Once()
+	log.EXPECT().GetTermAtIndex(lastIndex).Return(lastTerm, nil).Once()
+	log.EXPECT().GetEntry(uint64(13)).Return(entries[0], nil).Once()
+	log.EXPECT().GetEntry(uint64(14)).Return(entries[1], nil).Once()
+	log.EXPECT().GetEntry(uint64(15)).Return(entries[2], nil).Once()
+	log.EXPECT().GetEntry(uint64(16)).Return(entries[3], nil).Once()
+	stateMachine.EXPECT().GetLastApplied().Return(lastAppliedIndex)
+	stateMachine.EXPECT().Apply(entries[0]).Return(nil).Once()
+	stateMachine.EXPECT().Apply(entries[1]).Return(nil).Once()
+	stateMachine.EXPECT().Apply(entries[2]).Return(nil).Once()
+	stateMachine.EXPECT().Apply(entries[3]).Return(nil).Once()
+	network.EXPECT().SendRequestVoteAsync(lastTerm + 1).Return().Once()
+	majorityVoteChan := make(chan bool, 1)
+	majorityVoteChan <- false
+	network.EXPECT().GotMajorityVote(mock.Anything).Return(majorityVoteChan).Once()
+	network.EXPECT().GetId().Return(nodeId)
+
+	raftNode, _ := New(500, 50, log, stateMachine, network)
+	raftNode.SetCommitIndex(raftNode.GetCommitIndex() + 4)
+	raftNode.runIteration()
+	raftNode.runIteration()
+	raftNode.runIteration()
+	raftNode.runIteration()
+
+	assert.Equal(t, node.Follower, raftNode.GetState())
+	assert.Equal(t, uint64(16), raftNode.lastApplied)
+}
+
 // TODO: test leader iteration + cases

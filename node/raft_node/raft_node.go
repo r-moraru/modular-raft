@@ -3,6 +3,7 @@ package raft_node
 import (
 	"context"
 	logger "log"
+	"sort"
 	"sync"
 	"time"
 
@@ -42,6 +43,7 @@ type Node struct {
 	network      network.Network
 }
 
+// TODO: make sure network always has odd number of members
 func New(electionTimeout uint64, heartbeat uint64, log log.Log, stateMachine state_machine.StateMachine, network network.Network) (*Node, error) {
 	currentTerm, err := log.GetTermAtIndex(log.GetLastIndex())
 	if err != nil {
@@ -190,33 +192,27 @@ func (n *Node) runCandidateIteration() {
 
 func (n *Node) runLeaderIteration() {
 	heartbeatTimer := time.NewTimer(time.Duration(n.heartbeat) * time.Millisecond)
+	defer func() {
+		<-heartbeatTimer.C
+	}()
 
 	<-n.SendAppendEntriesToPeers()
 
-	numReadyToCommitNext := 0
-	numPeers := 0
+	sortedMatchIndexes := []uint64{}
 	n.matchIndex.Range(func(key any, value any) bool {
-		numPeers += 1
-		peerMatchIndex := value.(uint64)
-		if n.commitIndex < n.log.GetLastIndex() {
-			nextCommitIndexTerm, err := n.log.GetTermAtIndex(n.commitIndex + 1)
-			if err != nil {
-				logger.Fatalf("Failed to get entry for next commit index %d from log.", n.commitIndex+1)
-				return true
-			}
-			if peerMatchIndex > n.commitIndex && nextCommitIndexTerm == n.GetCurrentTerm() {
-				numReadyToCommitNext += 1
-			}
-		}
+		matchIndex := value.(uint64)
+		sortedMatchIndexes = append(sortedMatchIndexes, matchIndex)
 		return true
 	})
-
-	// Add one to include self
-	if numReadyToCommitNext+1 > (numPeers+1)/2 {
-		n.commitIndex += 1
+	sort.Slice(sortedMatchIndexes, func(i, j int) bool {
+		return sortedMatchIndexes[i] < sortedMatchIndexes[j]
+	})
+	majorityMatchIndex := sortedMatchIndexes[len(sortedMatchIndexes)/2]
+	nextCommitIndex := max(majorityMatchIndex, n.GetCommitIndex()+1)
+	termAtNextCommitIndex, err := n.log.GetTermAtIndex(nextCommitIndex)
+	if err == nil && termAtNextCommitIndex == n.GetCurrentTerm() {
+		n.SetCommitIndex(nextCommitIndex)
 	}
-
-	<-heartbeatTimer.C
 }
 
 func (n *Node) runIteration() {
