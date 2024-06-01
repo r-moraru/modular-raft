@@ -240,6 +240,7 @@ func (n *Node) runIteration() {
 }
 
 func (n *Node) Run(ctx context.Context) {
+	n.ResetTimer()
 	for {
 		select {
 		case <-ctx.Done():
@@ -296,7 +297,9 @@ func (n *Node) SendAppendEntriesToPeers() chan struct{} {
 				n.SendAppendEntry(peerId, logEntry)
 			}()
 		} else {
-			n.network.SendHeartbeat(peerId)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(n.heartbeat)*time.Millisecond)
+			defer cancel()
+			n.network.SendHeartbeat(ctx, peerId)
 		}
 
 		return true

@@ -164,9 +164,9 @@ func (_c *Network_SendAppendEntry_Call) RunAndReturn(run func(context.Context, s
 	return _c
 }
 
-// SendHeartbeat provides a mock function with given fields: peerId
-func (_m *Network) SendHeartbeat(peerId string) {
-	_m.Called(peerId)
+// SendHeartbeat provides a mock function with given fields: ctx, peerId
+func (_m *Network) SendHeartbeat(ctx context.Context, peerId string) {
+	_m.Called(ctx, peerId)
 }
 
 // Network_SendHeartbeat_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SendHeartbeat'
@@ -175,14 +175,15 @@ type Network_SendHeartbeat_Call struct {
 }
 
 // SendHeartbeat is a helper method to define mock.On call
+//   - ctx context.Context
 //   - peerId string
-func (_e *Network_Expecter) SendHeartbeat(peerId interface{}) *Network_SendHeartbeat_Call {
-	return &Network_SendHeartbeat_Call{Call: _e.mock.On("SendHeartbeat", peerId)}
+func (_e *Network_Expecter) SendHeartbeat(ctx interface{}, peerId interface{}) *Network_SendHeartbeat_Call {
+	return &Network_SendHeartbeat_Call{Call: _e.mock.On("SendHeartbeat", ctx, peerId)}
 }
 
-func (_c *Network_SendHeartbeat_Call) Run(run func(peerId string)) *Network_SendHeartbeat_Call {
+func (_c *Network_SendHeartbeat_Call) Run(run func(ctx context.Context, peerId string)) *Network_SendHeartbeat_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string))
+		run(args[0].(context.Context), args[1].(string))
 	})
 	return _c
 }
@@ -192,14 +193,14 @@ func (_c *Network_SendHeartbeat_Call) Return() *Network_SendHeartbeat_Call {
 	return _c
 }
 
-func (_c *Network_SendHeartbeat_Call) RunAndReturn(run func(string)) *Network_SendHeartbeat_Call {
+func (_c *Network_SendHeartbeat_Call) RunAndReturn(run func(context.Context, string)) *Network_SendHeartbeat_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// SendRequestVote provides a mock function with given fields: _a0, term
-func (_m *Network) SendRequestVote(_a0 context.Context, term uint64) chan bool {
-	ret := _m.Called(_a0, term)
+// SendRequestVote provides a mock function with given fields: ctx, term
+func (_m *Network) SendRequestVote(ctx context.Context, term uint64) chan bool {
+	ret := _m.Called(ctx, term)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SendRequestVote")
@@ -207,7 +208,7 @@ func (_m *Network) SendRequestVote(_a0 context.Context, term uint64) chan bool {
 
 	var r0 chan bool
 	if rf, ok := ret.Get(0).(func(context.Context, uint64) chan bool); ok {
-		r0 = rf(_a0, term)
+		r0 = rf(ctx, term)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(chan bool)
@@ -223,13 +224,13 @@ type Network_SendRequestVote_Call struct {
 }
 
 // SendRequestVote is a helper method to define mock.On call
-//   - _a0 context.Context
+//   - ctx context.Context
 //   - term uint64
-func (_e *Network_Expecter) SendRequestVote(_a0 interface{}, term interface{}) *Network_SendRequestVote_Call {
-	return &Network_SendRequestVote_Call{Call: _e.mock.On("SendRequestVote", _a0, term)}
+func (_e *Network_Expecter) SendRequestVote(ctx interface{}, term interface{}) *Network_SendRequestVote_Call {
+	return &Network_SendRequestVote_Call{Call: _e.mock.On("SendRequestVote", ctx, term)}
 }
 
-func (_c *Network_SendRequestVote_Call) Run(run func(_a0 context.Context, term uint64)) *Network_SendRequestVote_Call {
+func (_c *Network_SendRequestVote_Call) Run(run func(ctx context.Context, term uint64)) *Network_SendRequestVote_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		run(args[0].(context.Context), args[1].(uint64))
 	})

@@ -110,7 +110,7 @@ func (s *RaftNodeTestSuite) mockCommitIndexUpdateOutOfBoundsCalls() {
 }
 
 func (s *RaftNodeTestSuite) mockLeaderHeartbeatCalls(peerIndex int) {
-	s.network.EXPECT().SendHeartbeat(s.peers[peerIndex]).Once()
+	s.network.EXPECT().SendHeartbeat(mock.Anything, s.peers[peerIndex]).Once()
 }
 
 func (s *RaftNodeTestSuite) TestConstructor() {

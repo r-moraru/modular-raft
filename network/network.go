@@ -12,13 +12,14 @@ const (
 	Success ResponseStatus = iota
 	LogInconsistency
 	NotReceived
+	TermIssue
 )
 
 type Network interface {
 	GetId() string
 	GetPeerList() []string
 
-	SendRequestVote(context context.Context, term uint64) chan bool
-	SendHeartbeat(peerId string)
+	SendRequestVote(ctx context.Context, term uint64) chan bool
+	SendHeartbeat(ctx context.Context, peerId string)
 	SendAppendEntry(ctx context.Context, peerId string, logEntry *entries.LogEntry) ResponseStatus
 }
