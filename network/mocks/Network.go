@@ -116,54 +116,6 @@ func (_c *Network_GetPeerList_Call) RunAndReturn(run func() []string) *Network_G
 	return _c
 }
 
-// GotMajorityVote provides a mock function with given fields: ctx
-func (_m *Network) GotMajorityVote(ctx context.Context) chan bool {
-	ret := _m.Called(ctx)
-
-	if len(ret) == 0 {
-		panic("no return value specified for GotMajorityVote")
-	}
-
-	var r0 chan bool
-	if rf, ok := ret.Get(0).(func(context.Context) chan bool); ok {
-		r0 = rf(ctx)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(chan bool)
-		}
-	}
-
-	return r0
-}
-
-// Network_GotMajorityVote_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GotMajorityVote'
-type Network_GotMajorityVote_Call struct {
-	*mock.Call
-}
-
-// GotMajorityVote is a helper method to define mock.On call
-//   - ctx context.Context
-func (_e *Network_Expecter) GotMajorityVote(ctx interface{}) *Network_GotMajorityVote_Call {
-	return &Network_GotMajorityVote_Call{Call: _e.mock.On("GotMajorityVote", ctx)}
-}
-
-func (_c *Network_GotMajorityVote_Call) Run(run func(ctx context.Context)) *Network_GotMajorityVote_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
-	})
-	return _c
-}
-
-func (_c *Network_GotMajorityVote_Call) Return(_a0 chan bool) *Network_GotMajorityVote_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *Network_GotMajorityVote_Call) RunAndReturn(run func(context.Context) chan bool) *Network_GotMajorityVote_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // SendAppendEntry provides a mock function with given fields: ctx, peerId, logEntry
 func (_m *Network) SendAppendEntry(ctx context.Context, peerId string, logEntry *entries.LogEntry) network.ResponseStatus {
 	ret := _m.Called(ctx, peerId, logEntry)
@@ -245,35 +197,51 @@ func (_c *Network_SendHeartbeat_Call) RunAndReturn(run func(string)) *Network_Se
 	return _c
 }
 
-// SendRequestVoteAsync provides a mock function with given fields: term
-func (_m *Network) SendRequestVoteAsync(term uint64) {
-	_m.Called(term)
+// SendRequestVote provides a mock function with given fields: _a0, term
+func (_m *Network) SendRequestVote(_a0 context.Context, term uint64) chan bool {
+	ret := _m.Called(_a0, term)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SendRequestVote")
+	}
+
+	var r0 chan bool
+	if rf, ok := ret.Get(0).(func(context.Context, uint64) chan bool); ok {
+		r0 = rf(_a0, term)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(chan bool)
+		}
+	}
+
+	return r0
 }
 
-// Network_SendRequestVoteAsync_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SendRequestVoteAsync'
-type Network_SendRequestVoteAsync_Call struct {
+// Network_SendRequestVote_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SendRequestVote'
+type Network_SendRequestVote_Call struct {
 	*mock.Call
 }
 
-// SendRequestVoteAsync is a helper method to define mock.On call
+// SendRequestVote is a helper method to define mock.On call
+//   - _a0 context.Context
 //   - term uint64
-func (_e *Network_Expecter) SendRequestVoteAsync(term interface{}) *Network_SendRequestVoteAsync_Call {
-	return &Network_SendRequestVoteAsync_Call{Call: _e.mock.On("SendRequestVoteAsync", term)}
+func (_e *Network_Expecter) SendRequestVote(_a0 interface{}, term interface{}) *Network_SendRequestVote_Call {
+	return &Network_SendRequestVote_Call{Call: _e.mock.On("SendRequestVote", _a0, term)}
 }
 
-func (_c *Network_SendRequestVoteAsync_Call) Run(run func(term uint64)) *Network_SendRequestVoteAsync_Call {
+func (_c *Network_SendRequestVote_Call) Run(run func(_a0 context.Context, term uint64)) *Network_SendRequestVote_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(uint64))
+		run(args[0].(context.Context), args[1].(uint64))
 	})
 	return _c
 }
 
-func (_c *Network_SendRequestVoteAsync_Call) Return() *Network_SendRequestVoteAsync_Call {
-	_c.Call.Return()
+func (_c *Network_SendRequestVote_Call) Return(_a0 chan bool) *Network_SendRequestVote_Call {
+	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *Network_SendRequestVoteAsync_Call) RunAndReturn(run func(uint64)) *Network_SendRequestVoteAsync_Call {
+func (_c *Network_SendRequestVote_Call) RunAndReturn(run func(context.Context, uint64) chan bool) *Network_SendRequestVote_Call {
 	_c.Call.Return(run)
 	return _c
 }

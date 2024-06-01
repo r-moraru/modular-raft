@@ -18,9 +18,7 @@ type Network interface {
 	GetId() string
 	GetPeerList() []string
 
-	SendRequestVoteAsync(term uint64)
+	SendRequestVote(context context.Context, term uint64) chan bool
 	SendHeartbeat(peerId string)
 	SendAppendEntry(ctx context.Context, peerId string, logEntry *entries.LogEntry) ResponseStatus
-
-	GotMajorityVote(ctx context.Context) chan bool
 }

@@ -159,9 +159,10 @@ func (n *Node) runFollowerIteration() {
 }
 
 func (n *Node) resetLeaderBookkeeping() {
+	lastIndex := n.log.GetLastIndex()
 	for _, peerId := range n.network.GetPeerList() {
 		n.matchIndex.Store(peerId, 0)
-		n.nextIndex.Store(peerId, n.log.GetLastIndex())
+		n.nextIndex.Store(peerId, lastIndex)
 	}
 }
 
@@ -169,13 +170,12 @@ func (n *Node) runCandidateIteration() {
 	n.SetCurrentTerm(n.GetCurrentTerm() + 1)
 	n.SetVotedFor(n.network.GetId())
 	n.ResetTimer()
-	n.network.SendRequestVoteAsync(n.GetCurrentTerm())
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	select {
 	// TODO(Optional): also check network for received AppendEntriesRPC from new leader
-	case gotVoted := <-n.network.GotMajorityVote(ctx):
+	case gotVoted := <-n.network.SendRequestVote(ctx, n.GetCurrentTerm()):
 		n.ClearVotedFor()
 		if gotVoted {
 			n.SetState(node.Leader)
@@ -198,7 +198,7 @@ func (n *Node) runLeaderIteration() {
 
 	<-n.SendAppendEntriesToPeers()
 
-	sortedMatchIndexes := []uint64{}
+	sortedMatchIndexes := []uint64{n.log.GetLastIndex()}
 	n.matchIndex.Range(func(key any, value any) bool {
 		matchIndex := value.(uint64)
 		sortedMatchIndexes = append(sortedMatchIndexes, matchIndex)

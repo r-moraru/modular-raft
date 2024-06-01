@@ -1,4 +1,4 @@
-package raft_service
+package raft_network
 
 import (
 	"context"
