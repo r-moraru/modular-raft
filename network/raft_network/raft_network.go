@@ -3,6 +3,7 @@ package raft_network
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/r-moraru/modular-raft/log"
@@ -33,9 +34,19 @@ func (n *Network) GetPeerList() []string {
 	return peerList
 }
 
+type counter uint64
+
+func (c *counter) incrementCounter() uint64 {
+	return atomic.AddUint64((*uint64)(c), 1)
+}
+
+func (c *counter) getCounter() uint64 {
+	return atomic.LoadUint64((*uint64)(c))
+}
+
 func (n *Network) SendRequestVote(term uint64) chan bool {
 	majorityVoteChan := make(chan bool, 1)
-	votesFor := 0
+	votesFor := counter(0)
 
 	wg := sync.WaitGroup{}
 	for _, peerClient := range n.peers {
@@ -63,14 +74,14 @@ func (n *Network) SendRequestVote(term uint64) chan bool {
 				return
 			}
 			if res.VoteGranted {
-				votesFor += 1
+				votesFor.incrementCounter()
 			}
 		}()
 	}
 
 	go func() {
 		wg.Wait()
-		if (votesFor + 1) >= (len(n.peers)+1)/2 {
+		if (votesFor.getCounter() + 1) >= uint64((len(n.peers)+1)/2) {
 			majorityVoteChan <- true
 		} else {
 			majorityVoteChan <- false
