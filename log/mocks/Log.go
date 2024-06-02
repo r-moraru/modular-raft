@@ -4,7 +4,6 @@ package mocks
 
 import (
 	entries "github.com/r-moraru/modular-raft/proto/entries"
-	anypb "google.golang.org/protobuf/types/known/anypb"
 
 	mock "github.com/stretchr/testify/mock"
 )
@@ -23,7 +22,7 @@ func (_m *Log) EXPECT() *Log_Expecter {
 }
 
 // AppendEntry provides a mock function with given fields: term, clientID, serializationID, entry
-func (_m *Log) AppendEntry(term uint64, clientID string, serializationID uint64, entry *anypb.Any) error {
+func (_m *Log) AppendEntry(term uint64, clientID string, serializationID uint64, entry string) error {
 	ret := _m.Called(term, clientID, serializationID, entry)
 
 	if len(ret) == 0 {
@@ -31,7 +30,7 @@ func (_m *Log) AppendEntry(term uint64, clientID string, serializationID uint64,
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(uint64, string, uint64, *anypb.Any) error); ok {
+	if rf, ok := ret.Get(0).(func(uint64, string, uint64, string) error); ok {
 		r0 = rf(term, clientID, serializationID, entry)
 	} else {
 		r0 = ret.Error(0)
@@ -49,14 +48,14 @@ type Log_AppendEntry_Call struct {
 //   - term uint64
 //   - clientID string
 //   - serializationID uint64
-//   - entry *anypb.Any
+//   - entry string
 func (_e *Log_Expecter) AppendEntry(term interface{}, clientID interface{}, serializationID interface{}, entry interface{}) *Log_AppendEntry_Call {
 	return &Log_AppendEntry_Call{Call: _e.mock.On("AppendEntry", term, clientID, serializationID, entry)}
 }
 
-func (_c *Log_AppendEntry_Call) Run(run func(term uint64, clientID string, serializationID uint64, entry *anypb.Any)) *Log_AppendEntry_Call {
+func (_c *Log_AppendEntry_Call) Run(run func(term uint64, clientID string, serializationID uint64, entry string)) *Log_AppendEntry_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(uint64), args[1].(string), args[2].(uint64), args[3].(*anypb.Any))
+		run(args[0].(uint64), args[1].(string), args[2].(uint64), args[3].(string))
 	})
 	return _c
 }
@@ -66,7 +65,7 @@ func (_c *Log_AppendEntry_Call) Return(_a0 error) *Log_AppendEntry_Call {
 	return _c
 }
 
-func (_c *Log_AppendEntry_Call) RunAndReturn(run func(uint64, string, uint64, *anypb.Any) error) *Log_AppendEntry_Call {
+func (_c *Log_AppendEntry_Call) RunAndReturn(run func(uint64, string, uint64, string) error) *Log_AppendEntry_Call {
 	_c.Call.Return(run)
 	return _c
 }

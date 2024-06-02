@@ -7,7 +7,6 @@ import (
 	"github.com/r-moraru/modular-raft/log"
 	"github.com/r-moraru/modular-raft/node"
 	"github.com/r-moraru/modular-raft/state_machine"
-	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type RaftServer struct {
@@ -16,7 +15,7 @@ type RaftServer struct {
 	stateMachine state_machine.StateMachine
 }
 
-func (s *RaftServer) HandleReplicationRequest(ctx context.Context, clientID string, serializationID uint64, entry *anypb.Any) (node.ReplicationResponse, error) {
+func (s *RaftServer) HandleReplicationRequest(ctx context.Context, clientID string, serializationID uint64, entry string) (node.ReplicationResponse, error) {
 	res := node.ReplicationResponse{}
 	if s.node.GetState() != node.Leader {
 		res.ReplicationStatus = node.NotLeader
