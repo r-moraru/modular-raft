@@ -3,12 +3,11 @@ package state_machine
 import (
 	"context"
 
-	"github.com/golang/protobuf/ptypes/any"
 	"github.com/r-moraru/modular-raft/proto/entries"
 )
 
 type ApplyResult struct {
-	Result *any.Any
+	Result string
 	Error  error
 }
 

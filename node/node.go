@@ -3,7 +3,6 @@ package node
 import (
 	"context"
 
-	"github.com/golang/protobuf/ptypes/any"
 	"github.com/r-moraru/modular-raft/proto/entries"
 )
 
@@ -28,7 +27,7 @@ const (
 type ReplicationResponse struct {
 	ReplicationStatus ReplicationStatus
 	LeaderID          string
-	Result            *any.Any
+	Result            string
 }
 
 type Node interface {
