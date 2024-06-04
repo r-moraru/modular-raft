@@ -2,7 +2,7 @@ package raft_network
 
 import (
 	"context"
-	logger "log"
+	"fmt"
 
 	"github.com/r-moraru/modular-raft/log"
 	"github.com/r-moraru/modular-raft/node"
@@ -24,7 +24,7 @@ func (r *RaftService) buildRequestVoteResponse(voteGranted bool) *pb.RequestVote
 }
 
 func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRequest) (*pb.AppendEntriesResponse, error) {
-	if r.raftNode.GetCurrentTerm() >= req.GetTerm() {
+	if r.raftNode.GetCurrentTerm() > req.GetTerm() {
 		return r.buildAppendEntriesResponse(false), nil
 	}
 
@@ -38,12 +38,12 @@ func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRe
 
 	r.raftNode.ResetTimer()
 
-	if r.log.GetLength() <= req.GetPrevLogIndex() {
+	if r.log.GetLength() < req.GetPrevLogIndex() {
 		return r.buildAppendEntriesResponse(false), nil
 	}
 	termOfPrevLogIndex, err := r.log.GetTermAtIndex(req.GetPrevLogIndex())
 	if err != nil {
-		logger.Fatalf("Append entry - unable to get term at index %d from local log.", req.GetPrevLogIndex())
+		fmt.Printf("Append entry - unable to get term at index %d from local log.", req.GetPrevLogIndex())
 		return r.buildAppendEntriesResponse(false), err
 	}
 	if termOfPrevLogIndex != req.GetPrevLogTerm() {
@@ -58,7 +58,7 @@ func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRe
 	if r.log.GetLastIndex() >= req.Entry.Index {
 		termOfLogIndex, err := r.log.GetTermAtIndex(req.Entry.Index)
 		if err != nil {
-			logger.Fatalf("Append entry - unable to get term at index %d from local log.", req.Entry.Index)
+			fmt.Printf("Append entry - unable to get term at index %d from local log.", req.Entry.Index)
 			return r.buildAppendEntriesResponse(false), err
 		}
 		if termOfLogIndex == req.Entry.Term {
@@ -73,7 +73,7 @@ func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRe
 
 	err = r.log.InsertLogEntry(req.Entry)
 	if err != nil {
-		logger.Fatal("Append entry - failed to append entry.")
+		fmt.Printf("Append entry - failed to append entry.")
 		return r.buildAppendEntriesResponse(false), err
 	}
 

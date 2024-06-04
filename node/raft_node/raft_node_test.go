@@ -123,8 +123,8 @@ func (s *RaftNodeTestSuite) TestConstructor() {
 
 	s.mockNodeConstructorCalls()
 
-	raftNode, err := New(50, 15, s.log, s.stateMachine, s.network)
-	<-time.After(15 * time.Millisecond)
+	raftNode, err := New(10, 5, s.log, s.stateMachine, s.network)
+	<-time.After(5 * time.Millisecond)
 
 	assert.NoError(t, err, "Valid constructor call should not return error.")
 	assert.Equal(t, node.Follower, raftNode.GetState())
@@ -144,8 +144,8 @@ func (s *RaftNodeTestSuite) TestBecomesCandidateOnFirstIteration() {
 
 	s.mockNodeConstructorCalls()
 
-	raftNode, _ := New(50, 15, s.log, s.stateMachine, s.network)
-	<-time.After(15 * time.Millisecond)
+	raftNode, _ := New(10, 5, s.log, s.stateMachine, s.network)
+	<-time.After(5 * time.Millisecond)
 	raftNode.runIteration()
 
 	assert.Equal(t, node.Candidate, raftNode.GetState())
