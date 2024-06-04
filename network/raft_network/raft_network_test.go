@@ -103,6 +103,7 @@ func (s *RaftNetworkTestSuite) mockTimedOutRequestVoteCalls(peerId string, term 
 	}, nil).WaitUntil(timer.C)
 }
 
+// TODO: test rpc error results
 func (s *RaftNetworkTestSuite) TestSendRequestVoteSuccess() {
 	t := s.T()
 
@@ -111,7 +112,9 @@ func (s *RaftNetworkTestSuite) TestSendRequestVoteSuccess() {
 	s.mockSuccessfulRequestVoteCalls("node4", s.lastTerm+1)
 	s.mockSuccessfulRequestVoteCalls("node5", s.lastTerm+1)
 
-	majorityVoteChan := s.network.SendRequestVote(s.lastTerm + 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	majorityVoteChan := s.network.SendRequestVote(ctx, s.lastTerm+1)
 
 	blocked := false
 	var gotVoted bool
@@ -134,7 +137,9 @@ func (s *RaftNetworkTestSuite) TestSendRequestVoteFailure() {
 	s.mockTermIssueRequestVoteCalls("node4", s.lastTerm+1)
 	s.mockTermIssueRequestVoteCalls("node5", s.lastTerm+1)
 
-	majorityVoteChan := s.network.SendRequestVote(s.lastTerm + 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	majorityVoteChan := s.network.SendRequestVote(ctx, s.lastTerm+1)
 
 	blocked := false
 	var gotVoted bool
@@ -157,7 +162,9 @@ func (s *RaftNetworkTestSuite) TestSendRequestVoteVotedByHalf() {
 	s.mockTermIssueRequestVoteCalls("node4", s.lastTerm+1)
 	s.mockTermIssueRequestVoteCalls("node5", s.lastTerm+1)
 
-	majorityVoteChan := s.network.SendRequestVote(s.lastTerm + 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	majorityVoteChan := s.network.SendRequestVote(ctx, s.lastTerm+1)
 
 	blocked := false
 	var gotVoted bool
@@ -180,7 +187,9 @@ func (s *RaftNetworkTestSuite) TestSendRequestVoteTimeout() {
 	s.mockTimedOutRequestVoteCalls("node4", s.lastTerm+1)
 	s.mockTimedOutRequestVoteCalls("node5", s.lastTerm+1)
 
-	majorityVoteChan := s.network.SendRequestVote(s.lastTerm + 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	majorityVoteChan := s.network.SendRequestVote(ctx, s.lastTerm+1)
 
 	blocked := false
 	var gotVoted bool

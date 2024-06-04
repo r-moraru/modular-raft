@@ -4,16 +4,8 @@ import (
 	"context"
 	logger "log"
 
-	"github.com/r-moraru/modular-raft/log"
 	"github.com/r-moraru/modular-raft/node"
-	"github.com/r-moraru/modular-raft/state_machine"
 )
-
-type RaftServer struct {
-	log          log.Log
-	node         node.Node
-	stateMachine state_machine.StateMachine
-}
 
 func (s *RaftServer) HandleReplicationRequest(ctx context.Context, clientID string, serializationID uint64, entry string) (node.ReplicationResponse, error) {
 	res := node.ReplicationResponse{}

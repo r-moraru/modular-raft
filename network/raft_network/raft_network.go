@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/r-moraru/modular-raft/log"
 	"github.com/r-moraru/modular-raft/network"
@@ -44,37 +43,48 @@ func (c *counter) getCounter() uint64 {
 	return atomic.LoadUint64((*uint64)(c))
 }
 
-func (n *Network) SendRequestVote(term uint64) chan bool {
+func (n *Network) SendSingleRequestVote(ctx context.Context, peerClient raft_service.RaftServiceClient, term uint64) chan bool {
+	resChan := make(chan bool, 1)
+	lastIndex := n.log.GetLastIndex()
+	lastTerm, err := n.log.GetTermAtIndex(lastIndex)
+	if err != nil {
+		// TODO: log error
+		resChan <- false
+		return resChan
+	}
+
+	go func() {
+		res, err := peerClient.RequestVote(ctx, &raft_service.RequestVoteRequest{
+			Term:         term,
+			CandidateId:  n.GetId(),
+			LastLogIndex: lastIndex,
+			LastLogTerm:  lastTerm,
+		})
+		if err != nil {
+			resChan <- false
+		}
+		resChan <- res.VoteGranted
+	}()
+
+	return resChan
+}
+
+func (n *Network) SendRequestVote(ctx context.Context, term uint64) chan bool {
 	majorityVoteChan := make(chan bool, 1)
 	votesFor := counter(0)
 
 	wg := sync.WaitGroup{}
 	for _, peerClient := range n.peers {
 		localPeerClient := peerClient
-
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			lastIndex := n.log.GetLastIndex()
-			lastTerm, err := n.log.GetTermAtIndex(lastIndex)
-			if err != nil {
-				// TODO: log error
-				return
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(n.electionTimeout)*time.Millisecond)
-			defer cancel()
-			res, err := localPeerClient.RequestVote(ctx, &raft_service.RequestVoteRequest{
-				Term:         term,
-				CandidateId:  n.GetId(),
-				LastLogIndex: lastIndex,
-				LastLogTerm:  lastTerm,
-			})
-			if err != nil {
-				// TODO: log error
-				return
-			}
-			if res.VoteGranted {
-				votesFor.incrementCounter()
+			select {
+			case gotVote := <-n.SendSingleRequestVote(ctx, localPeerClient, term):
+				if gotVote {
+					votesFor.incrementCounter()
+				}
+			case <-ctx.Done():
 			}
 		}()
 	}
@@ -118,11 +128,17 @@ func (n *Network) SendAppendEntry(ctx context.Context, peerId string, entry *ent
 			LeaderCommit: n.node.GetCommitIndex(),
 			Entry:        entry,
 		})
+		if err != nil {
+			resChan <- nil
+		}
 		resChan <- res
 	}()
 
 	select {
 	case res := <-resChan:
+		if res == nil {
+			return network.NotReceived
+		}
 		if res.Term > n.node.GetCurrentTerm() {
 			return network.TermIssue
 		}

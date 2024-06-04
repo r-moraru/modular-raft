@@ -3,6 +3,7 @@ package raft_node
 import (
 	"errors"
 	"testing"
+	"time"
 
 	log_mocks "github.com/r-moraru/modular-raft/log/mocks"
 	"github.com/r-moraru/modular-raft/network"
@@ -59,6 +60,7 @@ func (s *RaftNodeTestSuite) SetupTest() {
 			SerializationID: 12348,
 		},
 	}
+
 }
 
 func (s *RaftNodeTestSuite) mockNodeConstructorCalls() {
@@ -121,7 +123,8 @@ func (s *RaftNodeTestSuite) TestConstructor() {
 
 	s.mockNodeConstructorCalls()
 
-	raftNode, err := New(100, 50, s.log, s.stateMachine, s.network)
+	raftNode, err := New(50, 15, s.log, s.stateMachine, s.network)
+	<-time.After(15 * time.Millisecond)
 
 	assert.NoError(t, err, "Valid constructor call should not return error.")
 	assert.Equal(t, node.Follower, raftNode.GetState())
@@ -141,7 +144,8 @@ func (s *RaftNodeTestSuite) TestBecomesCandidateOnFirstIteration() {
 
 	s.mockNodeConstructorCalls()
 
-	raftNode, _ := New(100, 50, s.log, s.stateMachine, s.network)
+	raftNode, _ := New(50, 15, s.log, s.stateMachine, s.network)
+	<-time.After(15 * time.Millisecond)
 	raftNode.runIteration()
 
 	assert.Equal(t, node.Candidate, raftNode.GetState())
@@ -165,7 +169,8 @@ func (s *RaftNodeTestSuite) TestSuccessfulCandidateIteration() {
 	s.mockSuccessfulCandidateIterationCalls(s.lastTerm + 1)
 	s.mockResetLeaderBookkeepingCalls()
 
-	raftNode, _ := New(100, 50, s.log, s.stateMachine, s.network)
+	raftNode, _ := New(10, 5, s.log, s.stateMachine, s.network)
+	<-time.After(5 * time.Millisecond)
 	raftNode.runIteration()
 	raftNode.runIteration()
 
@@ -185,7 +190,8 @@ func (s *RaftNodeTestSuite) TestFailedCandidateIterationTurnsNodeToFollower() {
 	s.mockNodeConstructorCalls()
 	s.mockFailedCandidateIterationCalls(s.lastTerm + 1)
 
-	raftNode, _ := New(100, 50, s.log, s.stateMachine, s.network)
+	raftNode, _ := New(10, 5, s.log, s.stateMachine, s.network)
+	<-time.After(5 * time.Millisecond)
 	raftNode.runIteration()
 	raftNode.runIteration()
 
@@ -213,7 +219,8 @@ func (s *RaftNodeTestSuite) TestTimedOutCandidateIterationRetries() {
 	s.mockSuccessfulCandidateIterationCalls(s.lastTerm + 2)
 	s.mockResetLeaderBookkeepingCalls()
 
-	raftNode, _ := New(100, 50, s.log, s.stateMachine, s.network)
+	raftNode, _ := New(10, 5, s.log, s.stateMachine, s.network)
+	<-time.After(5 * time.Millisecond)
 	raftNode.runIteration()
 	raftNode.runIteration()
 	raftNode.runIteration()
@@ -242,7 +249,8 @@ func (s *RaftNodeTestSuite) TestAppliesCommittedEntriesNotYetApplied() {
 	s.mockNodeConstructorCalls()
 	s.mockEntryApplicationCalls(0)
 
-	raftNode, _ := New(100, 50, s.log, s.stateMachine, s.network)
+	raftNode, _ := New(10, 5, s.log, s.stateMachine, s.network)
+	<-time.After(5 * time.Millisecond)
 	raftNode.SetCommitIndex(raftNode.GetCommitIndex() + 1)
 	raftNode.runIteration()
 
@@ -265,7 +273,8 @@ func (s *RaftNodeTestSuite) TestMultipleFollowerIterations() {
 	s.mockEntryApplicationCalls(2)
 	s.mockEntryApplicationCalls(3)
 
-	raftNode, _ := New(500, 30, s.log, s.stateMachine, s.network)
+	raftNode, _ := New(10, 5, s.log, s.stateMachine, s.network)
+	<-time.After(5 * time.Millisecond)
 	raftNode.SetCommitIndex(raftNode.GetCommitIndex() + 4)
 	raftNode.runIteration()
 	raftNode.runIteration()
@@ -296,7 +305,8 @@ func (s *RaftNodeTestSuite) TestLeaderIterationSendsAppendEntriesOnFirstIteratio
 	s.mockSuccessfulLeaderReplicationCalls(1, 0)
 	s.mockCommitIndexUpdateOutOfBoundsCalls()
 
-	raftNode, _ := New(300, 30, s.log, s.stateMachine, s.network)
+	raftNode, _ := New(10, 5, s.log, s.stateMachine, s.network)
+	<-time.After(5 * time.Millisecond)
 	raftNode.runIteration()
 	raftNode.runIteration()
 	raftNode.runIteration()
@@ -341,7 +351,8 @@ func (s *RaftNodeTestSuite) TestLeaderIterationSendsHeartbeats() {
 	s.mockLeaderHeartbeatCalls(0)
 	s.mockLeaderHeartbeatCalls(1)
 
-	raftNode, _ := New(300, 30, s.log, s.stateMachine, s.network)
+	raftNode, _ := New(10, 5, s.log, s.stateMachine, s.network)
+	<-time.After(5 * time.Millisecond)
 	raftNode.runIteration()
 	raftNode.runIteration()
 	raftNode.runIteration()

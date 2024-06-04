@@ -25,9 +25,9 @@ const (
 )
 
 type ReplicationResponse struct {
-	ReplicationStatus ReplicationStatus
-	LeaderID          string
-	Result            string
+	ReplicationStatus ReplicationStatus `json:"replication_status"`
+	LeaderID          string            `json:"leader_id"`
+	Result            string            `json:"result"`
 }
 
 type Node interface {
