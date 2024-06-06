@@ -64,6 +64,7 @@ func (s *RaftNodeTestSuite) SetupTest() {
 }
 
 func (s *RaftNodeTestSuite) mockNodeConstructorCalls() {
+	s.log.EXPECT().GetLength().Return(uint64(16)).Once()
 	s.log.EXPECT().GetLastIndex().Return(s.lastIndex).Once()
 	s.log.EXPECT().GetTermAtIndex(s.lastIndex).Return(s.lastTerm, nil).Once()
 	s.stateMachine.EXPECT().GetLastApplied().Return(s.lastAppliedIndex).Twice()
@@ -301,8 +302,8 @@ func (s *RaftNodeTestSuite) TestLeaderIterationSendsAppendEntriesOnFirstIteratio
 	s.mockSuccessfulCandidateIterationCalls(s.lastTerm + 1)
 	s.mockResetLeaderBookkeepingCalls()
 
-	s.mockSuccessfulLeaderReplicationCalls(0, 0)
-	s.mockSuccessfulLeaderReplicationCalls(1, 0)
+	s.mockSuccessfulLeaderReplicationCalls(0, 1)
+	s.mockSuccessfulLeaderReplicationCalls(1, 1)
 	s.mockCommitIndexUpdateOutOfBoundsCalls()
 
 	raftNode, _ := New(10, 5, s.log, s.stateMachine, s.network)
@@ -314,16 +315,16 @@ func (s *RaftNodeTestSuite) TestLeaderIterationSendsAppendEntriesOnFirstIteratio
 	assert.Equal(t, node.Leader, raftNode.GetState())
 	val, ok := raftNode.matchIndex.Load(s.peers[0])
 	assert.True(t, ok, "Leader bookkeeping incomplete.")
-	assert.Equal(t, val.(uint64), s.lastIndex)
+	assert.Equal(t, val.(uint64), s.lastIndex+1)
 	val, ok = raftNode.matchIndex.Load(s.peers[1])
 	assert.True(t, ok, "Leader bookkeeping incomplete.")
-	assert.Equal(t, val.(uint64), s.lastIndex)
+	assert.Equal(t, val.(uint64), s.lastIndex+1)
 	val, ok = raftNode.nextIndex.Load(s.peers[0])
 	assert.True(t, ok, "Leader bookkeeping incomplete.")
-	assert.Equal(t, val.(uint64), s.lastIndex+1)
+	assert.Equal(t, val.(uint64), s.lastIndex+2)
 	val, ok = raftNode.nextIndex.Load(s.peers[1])
 	assert.True(t, ok, "Leader bookkeeping incomplete.")
-	assert.Equal(t, val.(uint64), s.lastIndex+1)
+	assert.Equal(t, val.(uint64), s.lastIndex+2)
 }
 
 func (s *RaftNodeTestSuite) TestLeaderIterationSendsHeartbeats() {
@@ -362,10 +363,10 @@ func (s *RaftNodeTestSuite) TestLeaderIterationSendsHeartbeats() {
 	assert.Equal(t, node.Leader, raftNode.GetState())
 	val, ok := raftNode.matchIndex.Load(s.peers[0])
 	assert.True(t, ok, "Leader bookkeeping incomplete.")
-	assert.Equal(t, val.(uint64), s.lastIndex)
+	assert.Equal(t, val.(uint64), s.lastIndex+1)
 	val, ok = raftNode.matchIndex.Load(s.peers[1])
 	assert.True(t, ok, "Leader bookkeeping incomplete.")
-	assert.Equal(t, val.(uint64), s.lastIndex)
+	assert.Equal(t, val.(uint64), s.lastIndex+1)
 	val, ok = raftNode.nextIndex.Load(s.peers[0])
 	assert.True(t, ok, "Leader bookkeeping incomplete.")
 	assert.Equal(t, val.(uint64), s.lastIndex+1)

@@ -2,7 +2,9 @@ package raft_node
 
 import (
 	"context"
-	logger "log"
+	"fmt"
+	"log/slog"
+	"math/rand"
 	"sort"
 	"sync"
 	"time"
@@ -19,6 +21,7 @@ type Node struct {
 	stateLock *sync.RWMutex
 
 	timer           *time.Timer
+	timerMutex      *sync.RWMutex
 	electionTimeout uint64
 	heartbeat       uint64
 
@@ -45,14 +48,21 @@ type Node struct {
 
 // TODO: make sure network always has odd number of members
 func New(electionTimeout uint64, heartbeat uint64, log log.Log, stateMachine state_machine.StateMachine, network network.Network) (*Node, error) {
-	currentTerm, err := log.GetTermAtIndex(log.GetLastIndex())
-	if err != nil {
-		return nil, err
+	var currentTerm uint64
+	var err error
+	if log.GetLength() == 0 {
+		currentTerm = 0
+	} else {
+		currentTerm, err = log.GetTermAtIndex(log.GetLastIndex())
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &Node{
 		state:               node.Follower,
-		stateLock:           &sync.RWMutex{},
+		stateLock:           new(sync.RWMutex),
 		timer:               time.NewTimer(time.Duration(0)),
+		timerMutex:          &sync.RWMutex{},
 		electionTimeout:     electionTimeout,
 		heartbeat:           heartbeat,
 		currentTerm:         currentTerm,
@@ -146,12 +156,18 @@ func (n *Node) SetCommitIndex(commitIndex uint64) {
 
 func (n *Node) ResetTimer() {
 	// TODO: randomize timer around electionTimeout range
-	n.timer.Reset(time.Duration(n.electionTimeout) * time.Millisecond)
+	slog.Info("Resetting timer.")
+	n.timerMutex.Lock()
+	defer n.timerMutex.Unlock()
+	n.timer = time.NewTimer(time.Duration(n.electionTimeout+uint64(rand.Intn(100))) * time.Millisecond)
 }
 
 func (n *Node) runFollowerIteration() {
+	n.timerMutex.RLock()
+	defer n.timerMutex.RUnlock()
 	select {
 	case <-n.timer.C:
+		slog.Info("ELECTION TIMEOUT!! - turning into candidate.")
 		n.SetState(node.Candidate)
 	default:
 		return
@@ -161,8 +177,8 @@ func (n *Node) runFollowerIteration() {
 func (n *Node) resetLeaderBookkeeping() {
 	lastIndex := n.log.GetLastIndex()
 	for _, peerId := range n.network.GetPeerList() {
-		n.matchIndex.Store(peerId, 0)
-		n.nextIndex.Store(peerId, lastIndex)
+		n.matchIndex.Store(peerId, uint64(0))
+		n.nextIndex.Store(peerId, lastIndex+1)
 	}
 }
 
@@ -178,6 +194,7 @@ func (n *Node) runCandidateIteration() {
 	case gotVoted := <-n.network.SendRequestVote(ctx, n.GetCurrentTerm()):
 		n.ClearVotedFor()
 		if gotVoted {
+			slog.Info("State changed to LEADER.\n")
 			n.SetState(node.Leader)
 			n.SetCurrentLeaderID(n.network.GetId())
 			n.resetLeaderBookkeeping()
@@ -228,12 +245,12 @@ func (n *Node) runIteration() {
 	if n.commitIndex > n.lastApplied {
 		logEntry, err := n.log.GetEntry(n.lastApplied + 1)
 		if err != nil {
-			logger.Fatalf("Failed to get next entry to apply at index %d from log.", n.lastApplied+1)
+			slog.Error(fmt.Sprintf("Failed to get next entry to apply at index %d from log.", n.lastApplied+1))
 			return
 		}
 		err = n.stateMachine.Apply(logEntry)
 		if err != nil {
-			logger.Fatalf("State machine unable to apply entry at index %d, term %d.", logEntry.Index, logEntry.Term)
+			slog.Error(fmt.Sprintf("State machine unable to apply entry at index %d, term %d.", logEntry.Index, logEntry.Term))
 		}
 		n.lastApplied += 1
 	}
@@ -257,12 +274,12 @@ func (n *Node) SendAppendEntry(peerId string, logEntry *entries.LogEntry) {
 	responseStatus := n.network.SendAppendEntry(ctx, peerId, logEntry)
 	value, loaded := n.nextIndex.Load(peerId)
 	if !loaded {
-		logger.Fatalf("Bookkeeping error - peer %s not found.", peerId)
+		slog.Error(fmt.Sprintf("Bookkeeping error - peer %s not found.", peerId))
 		return
 	}
 	nextIndex, ok := value.(uint64)
 	if !ok {
-		logger.Fatal("Bookkeeping error - next index value is not uint64.")
+		slog.Error("Bookkeeping error - next index value is not uint64.")
 	}
 	switch responseStatus {
 	case network.Success:
@@ -281,22 +298,24 @@ func (n *Node) SendAppendEntriesToPeers() chan struct{} {
 		peerNextIndex := value.(uint64)
 		peerMatchIndex, found := n.matchIndex.Load(peerId)
 		if !found {
-			logger.Fatalf("Leader bookkeeping mismatch: peer %s from nextIndex not found in matchIndex.", peerId)
+			slog.Error(fmt.Sprintf("Leader bookkeeping mismatch: peer %s from nextIndex not found in matchIndex.", peerId))
 			return true
 		}
 		if peerMatchIndex != n.log.GetLastIndex() {
 			logEntry, err := n.log.GetEntry(peerNextIndex)
 			if err != nil {
-				logger.Fatalf("Failed to get entry at index %d from log.", peerNextIndex)
+				slog.Error(fmt.Sprintf("Failed to get entry at index %d from log.", peerNextIndex))
 				return true
 			}
 
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				slog.Info("Sending append entry to " + peerId + "\n")
 				n.SendAppendEntry(peerId, logEntry)
 			}()
 		} else {
+			slog.Info("Sending heartbeat to " + peerId + "\n")
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(n.heartbeat)*time.Millisecond)
 			defer cancel()
 			n.network.SendHeartbeat(ctx, peerId)

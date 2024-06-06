@@ -43,16 +43,16 @@ func (s *RaftNetworkTestSuite) SetupTest() {
 		"node5": raft_service_mocks.NewRaftServiceClient(s.T()),
 	}
 	s.network = &Network{
-		nodeId:          "node1",
-		electionTimeout: 50,
-		peers: map[string]raft_service.RaftServiceClient{
+		NodeId:          "node1",
+		ElectionTimeout: 50,
+		Peers: map[string]raft_service.RaftServiceClient{
 			"node2": s.peerMocks["node2"],
 			"node3": s.peerMocks["node3"],
 			"node4": s.peerMocks["node4"],
 			"node5": s.peerMocks["node5"],
 		},
-		log:  s.log,
-		node: s.node,
+		Log:  s.log,
+		Node: s.node,
 	}
 	s.lastIndex = 13
 	s.lastTerm = 3
@@ -91,7 +91,7 @@ func (s *RaftNetworkTestSuite) mockTermIssueRequestVoteCalls(peerId string, term
 func (s *RaftNetworkTestSuite) mockTimedOutRequestVoteCalls(peerId string, term uint64) {
 	s.log.EXPECT().GetLastIndex().Return(s.lastIndex).Once()
 	s.log.EXPECT().GetTermAtIndex(s.lastIndex).Return(s.lastTerm, nil).Once()
-	timer := time.NewTimer(time.Duration(s.network.electionTimeout*2) * time.Millisecond)
+	timer := time.NewTimer(time.Duration(s.network.ElectionTimeout*2) * time.Millisecond)
 	s.peerMocks[peerId].EXPECT().RequestVote(mock.Anything, &raft_service.RequestVoteRequest{
 		Term:         term,
 		CandidateId:  s.network.GetId(),
@@ -121,7 +121,7 @@ func (s *RaftNetworkTestSuite) TestSendRequestVoteSuccess() {
 	select {
 	case gotVoted = <-majorityVoteChan:
 		blocked = false
-	case <-time.After(time.Duration(s.network.electionTimeout) * time.Millisecond):
+	case <-time.After(time.Duration(s.network.ElectionTimeout) * time.Millisecond):
 		blocked = true
 	}
 
@@ -146,7 +146,7 @@ func (s *RaftNetworkTestSuite) TestSendRequestVoteFailure() {
 	select {
 	case gotVoted = <-majorityVoteChan:
 		blocked = false
-	case <-time.After(time.Duration(s.network.electionTimeout) * time.Millisecond):
+	case <-time.After(time.Duration(s.network.ElectionTimeout) * time.Millisecond):
 		blocked = true
 	}
 
@@ -171,7 +171,7 @@ func (s *RaftNetworkTestSuite) TestSendRequestVoteVotedByHalf() {
 	select {
 	case gotVoted = <-majorityVoteChan:
 		blocked = false
-	case <-time.After(time.Duration(s.network.electionTimeout) * time.Millisecond):
+	case <-time.After(time.Duration(s.network.ElectionTimeout) * time.Millisecond):
 		blocked = true
 	}
 
@@ -196,7 +196,7 @@ func (s *RaftNetworkTestSuite) TestSendRequestVoteTimeout() {
 	select {
 	case gotVoted = <-majorityVoteChan:
 		blocked = false
-	case <-time.After(time.Duration(s.network.electionTimeout) * time.Millisecond):
+	case <-time.After(time.Duration(s.network.ElectionTimeout) * time.Millisecond):
 		blocked = true
 	}
 
@@ -205,15 +205,11 @@ func (s *RaftNetworkTestSuite) TestSendRequestVoteTimeout() {
 }
 
 func (s *RaftNetworkTestSuite) TestSendHeartbeatSuccess() {
-	s.log.EXPECT().GetLastIndex().Return(s.lastIndex).Once()
-	s.log.EXPECT().GetTermAtIndex(s.lastIndex).Return(s.lastTerm, nil).Once()
 	s.node.EXPECT().GetCurrentTerm().Return(s.currentTerm).Once()
 	s.node.EXPECT().GetCommitIndex().Return(s.commitIndex).Once()
 	s.peerMocks["node2"].EXPECT().AppendEntries(mock.Anything, &raft_service.AppendEntriesRequest{
 		Term:         s.currentTerm,
 		LeaderId:     s.network.GetId(),
-		PrevLogIndex: s.lastIndex,
-		PrevLogTerm:  s.lastTerm,
 		LeaderCommit: s.commitIndex,
 		Entry:        nil,
 	}).Return(&raft_service.AppendEntriesResponse{
@@ -222,7 +218,7 @@ func (s *RaftNetworkTestSuite) TestSendHeartbeatSuccess() {
 	}, nil)
 	s.node.EXPECT().GetCurrentTerm().Return(s.currentTerm).Once()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.network.electionTimeout)*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.network.ElectionTimeout)*time.Millisecond)
 	defer cancel()
 	s.network.SendHeartbeat(ctx, "node2")
 
@@ -249,7 +245,7 @@ func (s *RaftNetworkTestSuite) TestSendAppendEntriesSuccess() {
 	}, nil)
 	s.node.EXPECT().GetCurrentTerm().Return(s.currentTerm).Once()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.network.electionTimeout)*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.network.ElectionTimeout)*time.Millisecond)
 	defer cancel()
 	status := s.network.SendAppendEntry(ctx, "node2", &entries.LogEntry{})
 
@@ -278,7 +274,7 @@ func (s *RaftNetworkTestSuite) TestSendAppendEntriesLogInconsistency() {
 	}, nil)
 	s.node.EXPECT().GetCurrentTerm().Return(s.currentTerm).Once()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.network.electionTimeout)*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.network.ElectionTimeout)*time.Millisecond)
 	defer cancel()
 	status := s.network.SendAppendEntry(ctx, "node2", &entries.LogEntry{})
 
@@ -294,7 +290,7 @@ func (s *RaftNetworkTestSuite) TestSendAppendEntriesTimedOut() {
 	s.log.EXPECT().GetTermAtIndex(s.lastIndex).Return(s.lastTerm, nil).Once()
 	s.node.EXPECT().GetCurrentTerm().Return(s.currentTerm).Once()
 	s.node.EXPECT().GetCommitIndex().Return(s.commitIndex).Once()
-	waitTimer := time.NewTimer(time.Duration(2*s.network.electionTimeout) * time.Millisecond)
+	waitTimer := time.NewTimer(time.Duration(2*s.network.ElectionTimeout) * time.Millisecond)
 	s.peerMocks["node2"].EXPECT().AppendEntries(mock.Anything, &raft_service.AppendEntriesRequest{
 		Term:         s.currentTerm,
 		LeaderId:     s.network.GetId(),
@@ -307,7 +303,7 @@ func (s *RaftNetworkTestSuite) TestSendAppendEntriesTimedOut() {
 		Success: false,
 	}, nil).WaitUntil(waitTimer.C)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.network.electionTimeout)*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.network.ElectionTimeout)*time.Millisecond)
 	defer cancel()
 	status := s.network.SendAppendEntry(ctx, "node2", &entries.LogEntry{})
 

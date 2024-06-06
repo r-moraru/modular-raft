@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -65,7 +65,7 @@ func (s *StateMachineClient) WaitForResult(ctx context.Context, clientID string,
 	}
 	marshalledPayload, err := json.Marshal(payload)
 	if err != nil {
-		log.Fatalf("Failed to marshal payload.")
+		slog.Error("Failed to marshal payload.")
 		resultChan <- state_machine.ApplyResult{
 			Error: err,
 		}
@@ -74,7 +74,7 @@ func (s *StateMachineClient) WaitForResult(ctx context.Context, clientID string,
 
 	req, err := http.NewRequestWithContext(ctx, "POST", s.url+getResultPath, bytes.NewReader(marshalledPayload))
 	if err != nil {
-		log.Fatalf("Failed to create POST request.")
+		slog.Error("Failed to create POST request.")
 		resultChan <- state_machine.ApplyResult{
 			Error: err,
 		}
@@ -86,7 +86,7 @@ func (s *StateMachineClient) WaitForResult(ctx context.Context, clientID string,
 		bareHttpClient := &http.Client{}
 		resp, err := bareHttpClient.Do(req)
 		if err != nil {
-			log.Fatalf("Get result http request failed.")
+			slog.Error("Get result http request failed.")
 			resultChan <- state_machine.ApplyResult{
 				Error: err,
 			}
@@ -95,7 +95,7 @@ func (s *StateMachineClient) WaitForResult(ctx context.Context, clientID string,
 		defer resp.Body.Close()
 
 		if resp.StatusCode < 200 || resp.StatusCode > 299 {
-			log.Fatalf("Response status: " + resp.Status + " from state machine.")
+			slog.Error("Response status: " + resp.Status + " from state machine.")
 			resultChan <- state_machine.ApplyResult{
 				Error: errors.New("Received error from state machine."),
 			}
@@ -105,7 +105,7 @@ func (s *StateMachineClient) WaitForResult(ctx context.Context, clientID string,
 		getApplyResultResponse := new(GetApplyResultResponse)
 		err = json.NewDecoder(resp.Body).Decode(getApplyResultResponse)
 		if err != nil {
-			log.Fatalf("Error decoding response from state machine.")
+			slog.Error("Error decoding response from state machine.")
 			resultChan <- state_machine.ApplyResult{
 				Error: err,
 			}

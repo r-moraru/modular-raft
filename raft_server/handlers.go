@@ -9,19 +9,19 @@ import (
 
 func (s *RaftServer) HandleReplicationRequest(ctx context.Context, clientID string, serializationID uint64, entry string) (node.ReplicationResponse, error) {
 	res := node.ReplicationResponse{}
-	if s.node.GetState() != node.Leader {
+	if s.Node.GetState() != node.Leader {
 		res.ReplicationStatus = node.NotLeader
 		// best effort, might not be leader
-		res.LeaderID = s.node.GetCurrentLeaderID()
+		res.LeaderID = s.Node.GetCurrentLeaderID()
 		return res, nil
 	}
 
-	s.log.AppendEntry(s.node.GetCurrentTerm(), clientID, serializationID, entry)
+	s.Log.AppendEntry(s.Node.GetCurrentTerm(), clientID, serializationID, entry)
 
 	select {
 	case <-ctx.Done():
 		return res, nil
-	case result := <-s.stateMachine.WaitForResult(ctx, clientID, serializationID):
+	case result := <-s.StateMachine.WaitForResult(ctx, clientID, serializationID):
 		if result.Error != nil {
 			logger.Fatalf("State machine returned error for clientID %s, serializationID %d.", clientID, serializationID)
 			res.ReplicationStatus = node.ApplyError

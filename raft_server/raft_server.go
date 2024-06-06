@@ -20,9 +20,9 @@ type ReplicationResponse struct {
 }
 
 type RaftServer struct {
-	log          log.Log
-	node         node.Node
-	stateMachine state_machine.StateMachine
+	Log          log.Log
+	Node         node.Node
+	StateMachine state_machine.StateMachine
 }
 
 func (s *RaftServer) CreateReplicationHandler() func(http.ResponseWriter, *http.Request) {

@@ -26,8 +26,8 @@ func (s *RaftServiceTestSuite) SetupTest() {
 	s.log = log_mocks.NewLog(s.T())
 	s.raftNode = node_mocks.NewNode(s.T())
 	s.service = &RaftService{
-		raftNode: s.raftNode,
-		log:      s.log,
+		RaftNode: s.raftNode,
+		Log:      s.log,
 	}
 }
 
@@ -37,7 +37,8 @@ func (s *RaftServiceTestSuite) TestAppendEntriesRepliesFalseIfLeaderTermIsBehind
 	currentTerm := uint64(4)
 	s.raftNode.EXPECT().GetCurrentTerm().Return(currentTerm)
 	req := &raft_service.AppendEntriesRequest{
-		Term: 3,
+		Term:  3,
+		Entry: &entries.LogEntry{},
 	}
 
 	ctx := context.Background()
@@ -54,7 +55,7 @@ func (s *RaftServiceTestSuite) TestAppendEntriesNoEntryAtPrevLogIndex() {
 	currentTerm := uint64(2)
 	leaderId := "leader"
 	s.raftNode.EXPECT().GetCurrentTerm().Return(currentTerm)
-	s.raftNode.EXPECT().SetCurrentLeaderId(leaderId)
+	s.raftNode.EXPECT().SetCurrentLeaderID(leaderId)
 	s.raftNode.EXPECT().GetState().Return(node.Follower).Once()
 	s.raftNode.EXPECT().ResetTimer().Once()
 	s.log.EXPECT().GetLength().Return(14)
@@ -62,6 +63,7 @@ func (s *RaftServiceTestSuite) TestAppendEntriesNoEntryAtPrevLogIndex() {
 		Term:         currentTerm,
 		LeaderId:     leaderId,
 		PrevLogIndex: 15,
+		Entry:        &entries.LogEntry{},
 	}
 
 	ctx := context.Background()
@@ -78,7 +80,7 @@ func (s *RaftServiceTestSuite) TestAppendEntriesTurnsNodeToFollowerIfTermPasses(
 	currentTerm := uint64(2)
 	leaderId := "leader"
 	s.raftNode.EXPECT().GetCurrentTerm().Return(currentTerm)
-	s.raftNode.EXPECT().SetCurrentLeaderId(leaderId)
+	s.raftNode.EXPECT().SetCurrentLeaderID(leaderId)
 	s.raftNode.EXPECT().GetState().Return(node.Leader).Once()
 	s.raftNode.EXPECT().SetState(node.Follower).Once()
 	s.raftNode.EXPECT().ClearVotedFor().Once()
@@ -89,6 +91,7 @@ func (s *RaftServiceTestSuite) TestAppendEntriesTurnsNodeToFollowerIfTermPasses(
 		Term:         currentTerm,
 		LeaderId:     leaderId,
 		PrevLogIndex: 15,
+		Entry:        &entries.LogEntry{},
 	}
 
 	ctx := context.Background()
@@ -106,7 +109,7 @@ func (s *RaftServiceTestSuite) TestAppendEntriesThrowsErrorIfLogCannotGetTerm() 
 	currentTerm := uint64(2)
 	leaderId := "leader"
 	s.raftNode.EXPECT().GetCurrentTerm().Return(currentTerm)
-	s.raftNode.EXPECT().SetCurrentLeaderId(leaderId)
+	s.raftNode.EXPECT().SetCurrentLeaderID(leaderId)
 	s.raftNode.EXPECT().GetState().Return(node.Follower).Once()
 	s.raftNode.EXPECT().ResetTimer().Once()
 	s.log.EXPECT().GetLength().Return(prevLogIndex)
@@ -115,6 +118,7 @@ func (s *RaftServiceTestSuite) TestAppendEntriesThrowsErrorIfLogCannotGetTerm() 
 		Term:         currentTerm,
 		LeaderId:     leaderId,
 		PrevLogIndex: prevLogIndex,
+		Entry:        &entries.LogEntry{},
 	}
 
 	ctx := context.Background()
@@ -132,7 +136,7 @@ func (s *RaftServiceTestSuite) TestAppendEntriesReturnsFalseIfPrevTermMismatch()
 	currentTerm := uint64(2)
 	leaderId := "leader"
 	s.raftNode.EXPECT().GetCurrentTerm().Return(currentTerm)
-	s.raftNode.EXPECT().SetCurrentLeaderId(leaderId)
+	s.raftNode.EXPECT().SetCurrentLeaderID(leaderId)
 	s.raftNode.EXPECT().GetState().Return(node.Follower).Once()
 	s.raftNode.EXPECT().ResetTimer().Once()
 	s.log.EXPECT().GetLength().Return(prevLogIndex)
@@ -142,6 +146,7 @@ func (s *RaftServiceTestSuite) TestAppendEntriesReturnsFalseIfPrevTermMismatch()
 		LeaderId:     leaderId,
 		PrevLogIndex: prevLogIndex,
 		PrevLogTerm:  currentTerm,
+		Entry:        &entries.LogEntry{},
 	}
 
 	ctx := context.Background()
@@ -159,11 +164,9 @@ func (s *RaftServiceTestSuite) TestAppendEntriesAcceptsHeartbeat() {
 	currentTerm := uint64(2)
 	leaderId := "leader"
 	s.raftNode.EXPECT().GetCurrentTerm().Return(currentTerm)
-	s.raftNode.EXPECT().SetCurrentLeaderId(leaderId)
+	s.raftNode.EXPECT().SetCurrentLeaderID(leaderId)
 	s.raftNode.EXPECT().GetState().Return(node.Follower).Once()
 	s.raftNode.EXPECT().ResetTimer().Once()
-	s.log.EXPECT().GetLength().Return(prevLogIndex)
-	s.log.EXPECT().GetTermAtIndex(prevLogIndex).Return(currentTerm, nil)
 	req := &raft_service.AppendEntriesRequest{
 		Term:         currentTerm,
 		LeaderId:     leaderId,
@@ -186,7 +189,7 @@ func (s *RaftServiceTestSuite) TestAppendEntriesReturnsSuccessIfItAleadyHasTheEn
 	currentTerm := uint64(2)
 	leaderId := "leader"
 	s.raftNode.EXPECT().GetCurrentTerm().Return(currentTerm)
-	s.raftNode.EXPECT().SetCurrentLeaderId(leaderId)
+	s.raftNode.EXPECT().SetCurrentLeaderID(leaderId)
 	s.raftNode.EXPECT().GetState().Return(node.Follower).Once()
 	s.raftNode.EXPECT().ResetTimer().Once()
 	s.log.EXPECT().GetLength().Return(prevLogIndex)
@@ -202,6 +205,43 @@ func (s *RaftServiceTestSuite) TestAppendEntriesReturnsSuccessIfItAleadyHasTheEn
 			Term:  currentTerm,
 			Index: prevLogIndex + 1,
 		},
+	}
+
+	ctx := context.Background()
+	res, err := s.service.AppendEntries(ctx, req)
+
+	assert.NoError(t, err)
+	assert.Equal(t, true, res.Success)
+	assert.Equal(t, currentTerm, res.Term)
+}
+
+func (s *RaftServiceTestSuite) TestAppendEntriesAppendToLog() {
+	t := s.T()
+
+	prevLogIndex := uint64(15)
+	lastCommit := uint64(15)
+	currentTerm := uint64(2)
+	leaderId := "leader"
+	entry := &entries.LogEntry{
+		Term:  currentTerm,
+		Index: prevLogIndex + 1,
+	}
+	s.raftNode.EXPECT().GetCurrentTerm().Return(currentTerm)
+	s.raftNode.EXPECT().SetCurrentLeaderID(leaderId)
+	s.raftNode.EXPECT().GetState().Return(node.Follower).Once()
+	s.raftNode.EXPECT().ResetTimer().Once()
+	s.log.EXPECT().GetLength().Return(prevLogIndex)
+	s.log.EXPECT().GetTermAtIndex(prevLogIndex).Return(currentTerm, nil).Once()
+	s.log.EXPECT().GetLastIndex().Return(prevLogIndex)
+	s.raftNode.EXPECT().GetCommitIndex().Return(lastCommit).Once()
+	s.log.EXPECT().InsertLogEntry(entry).Return(nil).Once()
+	req := &raft_service.AppendEntriesRequest{
+		Term:         currentTerm,
+		LeaderId:     leaderId,
+		PrevLogIndex: prevLogIndex,
+		PrevLogTerm:  currentTerm,
+		LeaderCommit: lastCommit,
+		Entry:        entry,
 	}
 
 	ctx := context.Background()

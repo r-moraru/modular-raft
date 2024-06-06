@@ -2,6 +2,8 @@ package raft_network
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 
@@ -13,21 +15,21 @@ import (
 )
 
 type Network struct {
-	nodeId          string
-	peers           map[string]raft_service.RaftServiceClient
-	electionTimeout uint64
+	NodeId          string
+	Peers           map[string]raft_service.RaftServiceClient
+	ElectionTimeout uint64
 
-	log  log.Log
-	node node.Node
+	Log  log.Log
+	Node node.Node
 }
 
 func (n *Network) GetId() string {
-	return n.nodeId
+	return n.NodeId
 }
 
 func (n *Network) GetPeerList() []string {
-	peerList := make([]string, len(n.peers))
-	for peerId := range n.peers {
+	peerList := make([]string, len(n.Peers))
+	for peerId := range n.Peers {
 		peerList = append(peerList, peerId)
 	}
 	return peerList
@@ -45,12 +47,18 @@ func (c *counter) getCounter() uint64 {
 
 func (n *Network) SendSingleRequestVote(ctx context.Context, peerClient raft_service.RaftServiceClient, term uint64) chan bool {
 	resChan := make(chan bool, 1)
-	lastIndex := n.log.GetLastIndex()
-	lastTerm, err := n.log.GetTermAtIndex(lastIndex)
-	if err != nil {
-		// TODO: log error
-		resChan <- false
-		return resChan
+	var lastTerm uint64
+	var err error
+	lastIndex := n.Log.GetLastIndex()
+	if lastIndex == 0 {
+		lastTerm = 0
+	} else {
+		lastTerm, err = n.Log.GetTermAtIndex(lastIndex)
+		if err != nil {
+			// TODO: log error
+			resChan <- false
+			return resChan
+		}
 	}
 
 	go func() {
@@ -61,9 +69,12 @@ func (n *Network) SendSingleRequestVote(ctx context.Context, peerClient raft_ser
 			LastLogTerm:  lastTerm,
 		})
 		if err != nil {
+			slog.Error(err.Error())
 			resChan <- false
+		} else {
+			slog.Info(fmt.Sprintf("Vote granted from peer: %v\n", res.VoteGranted))
+			resChan <- res.VoteGranted
 		}
-		resChan <- res.VoteGranted
 	}()
 
 	return resChan
@@ -74,24 +85,32 @@ func (n *Network) SendRequestVote(ctx context.Context, term uint64) chan bool {
 	votesFor := counter(0)
 
 	wg := sync.WaitGroup{}
-	for _, peerClient := range n.peers {
+	for peerId, peerClient := range n.Peers {
+		if n.Node.GetState() != node.Candidate {
+			continue
+		}
 		localPeerClient := peerClient
+		localPeerId := peerId
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			slog.Debug(fmt.Sprintf("Sending request to %s\n", localPeerId))
 			select {
 			case gotVote := <-n.SendSingleRequestVote(ctx, localPeerClient, term):
 				if gotVote {
 					votesFor.incrementCounter()
 				}
 			case <-ctx.Done():
+				slog.Debug("context cancelled.\n")
 			}
 		}()
 	}
 
 	go func() {
 		wg.Wait()
-		if (votesFor.getCounter() + 1) >= uint64((len(n.peers)+1)/2) {
+		slog.Info(fmt.Sprintf("Num votes: %d\n", votesFor.getCounter()+1))
+		slog.Info(fmt.Sprintf("Minimum to get voted: %d\n", uint64((len(n.Peers)+1)/2)))
+		if (votesFor.getCounter() + 1) > uint64((len(n.Peers)+1)/2) {
 			majorityVoteChan <- true
 		} else {
 			majorityVoteChan <- false
@@ -106,26 +125,32 @@ func (n *Network) SendHeartbeat(ctx context.Context, peerId string) {
 }
 
 func (n *Network) SendAppendEntry(ctx context.Context, peerId string, entry *entries.LogEntry) network.ResponseStatus {
-	peerClient, found := n.peers[peerId]
+	peerClient, found := n.Peers[peerId]
 	if !found {
 		// TODO: log error
 		return network.NotReceived
 	}
-	lastIndex := n.log.GetLastIndex()
-	lastTerm, err := n.log.GetTermAtIndex(lastIndex)
-	if err != nil {
-		// TODO: log error
-		return network.NotReceived
+	var lastIndex uint64
+	var lastTerm uint64
+	var err error
+
+	if entry != nil {
+		lastIndex = n.Log.GetLastIndex()
+		lastTerm, err = n.Log.GetTermAtIndex(lastIndex)
+		if err != nil {
+			// TODO: log error
+			return network.NotReceived
+		}
 	}
 
 	resChan := make(chan *raft_service.AppendEntriesResponse, 1)
 	go func() {
-		res, _ := peerClient.AppendEntries(ctx, &raft_service.AppendEntriesRequest{
-			Term:         n.node.GetCurrentTerm(),
+		res, err := peerClient.AppendEntries(ctx, &raft_service.AppendEntriesRequest{
+			Term:         n.Node.GetCurrentTerm(),
 			LeaderId:     n.GetId(),
 			PrevLogIndex: lastIndex,
 			PrevLogTerm:  lastTerm,
-			LeaderCommit: n.node.GetCommitIndex(),
+			LeaderCommit: n.Node.GetCommitIndex(),
 			Entry:        entry,
 		})
 		if err != nil {
@@ -139,7 +164,7 @@ func (n *Network) SendAppendEntry(ctx context.Context, peerId string, entry *ent
 		if res == nil {
 			return network.NotReceived
 		}
-		if res.Term > n.node.GetCurrentTerm() {
+		if res.Term > n.Node.GetCurrentTerm() {
 			return network.TermIssue
 		}
 		if res.Success {
