@@ -25,9 +25,8 @@ func (r *RaftService) buildRequestVoteResponse(voteGranted bool) *pb.RequestVote
 }
 
 func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRequest) (*pb.AppendEntriesResponse, error) {
-	slog.Info(fmt.Sprintf("APPEND ENTRIES - Term from request: %d, Current term: %d\n", req.GetTerm(), r.RaftNode.GetCurrentTerm()))
 	if r.RaftNode.GetCurrentTerm() > req.GetTerm() {
-		slog.Info("Request term is behind - rejected.")
+		slog.Info("APPEND ENTRIES - Request term is behind - rejected.")
 		return r.buildAppendEntriesResponse(false), nil
 	}
 
@@ -36,47 +35,58 @@ func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRe
 	r.RaftNode.ResetTimer()
 
 	if r.RaftNode.GetState() != node.Follower {
-		slog.Info("Stepping down, becoming follower.")
+		slog.Info("APPEND ENTRIES - Stepping down, becoming follower.")
 		r.RaftNode.SetState(node.Follower)
 		r.RaftNode.ClearVotedFor()
 		r.RaftNode.SetCurrentTerm(req.GetTerm())
+	}
+
+	if req.GetLeaderCommit() > r.RaftNode.GetCommitIndex() {
+		slog.Info(fmt.Sprintf("APPEND ENTRIES - updated commit index to %d\n", req.GetLeaderCommit()))
+		r.RaftNode.SetCommitIndex(req.GetLeaderCommit())
+	}
+
+	if r.Log.GetLength() < req.GetPrevLogIndex() {
+		slog.Info(fmt.Sprintf("APPEND ENTRIES - PrevLogIndex %d out of bounds %d.", r.Log.GetLength(), req.GetPrevLogIndex()))
+		return r.buildAppendEntriesResponse(false), nil
+	}
+
+	var termOfPrevLogIndex uint64
+	var err error
+	if req.GetPrevLogIndex() == 0 {
+		termOfPrevLogIndex = 0
 	} else {
-		slog.Info("node is already follower for some reason.")
+		termOfPrevLogIndex, err = r.Log.GetTermAtIndex(req.GetPrevLogIndex())
+		if err != nil {
+			slog.Error(fmt.Sprintf("APPEND ENTRIES - unable to get term at index %d from local log.", req.GetPrevLogIndex()))
+			return r.buildAppendEntriesResponse(false), err
+		}
+	}
+	if termOfPrevLogIndex != req.GetPrevLogTerm() {
+		slog.Info("APPEND ENTRIES - term mismatch")
+		return r.buildAppendEntriesResponse(false), nil
 	}
 
 	if req.Entry == nil {
 		// Received heartbeat
+		slog.Info("APPEND ENTRIES - Received heartbeat.")
 		return r.buildAppendEntriesResponse(true), nil
-	}
-
-	if r.Log.GetLength() < req.GetPrevLogIndex() {
-		return r.buildAppendEntriesResponse(false), nil
-	}
-	termOfPrevLogIndex, err := r.Log.GetTermAtIndex(req.GetPrevLogIndex())
-	if err != nil {
-		slog.Error(fmt.Sprintf("Append entry - unable to get term at index %d from local log.", req.GetPrevLogIndex()))
-		return r.buildAppendEntriesResponse(false), err
-	}
-	if termOfPrevLogIndex != req.GetPrevLogTerm() {
-		return r.buildAppendEntriesResponse(false), nil
 	}
 
 	if r.Log.GetLastIndex() >= req.Entry.Index {
 		termOfLogIndex, err := r.Log.GetTermAtIndex(req.Entry.Index)
 		if err != nil {
-			slog.Error(fmt.Sprintf("Append entry - unable to get term at index %d from local log.", req.Entry.Index))
+			slog.Error(fmt.Sprintf("APPEND ENTRIES - unable to get term at index %d from local log.", req.Entry.Index))
 			return r.buildAppendEntriesResponse(false), err
 		}
 		if termOfLogIndex == req.Entry.Term {
 			// already appended
+			slog.Info("APPEND ENTRIES - Already have entry")
 			return r.buildAppendEntriesResponse(true), nil
 		}
 	}
 
-	if req.GetLeaderCommit() > r.RaftNode.GetCommitIndex() {
-		r.RaftNode.SetCommitIndex(min(req.GetLeaderCommit(), req.GetEntry().GetIndex()))
-	}
-
+	slog.Info(fmt.Sprintf("APPEND ENTRIES - inserting log entry at index %d, term %d.", req.Entry.Index, req.Entry.Term))
 	err = r.Log.InsertLogEntry(req.Entry)
 	if err != nil {
 		slog.Error("Append entry - failed to append entry.")
@@ -87,14 +97,14 @@ func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRe
 }
 
 func (r *RaftService) RequestVote(ctx context.Context, req *pb.RequestVoteRequest) (*pb.RequestVoteResponse, error) {
-	slog.Info(fmt.Sprintf("Term from request: %d, Current term: %d\n", req.GetTerm(), r.RaftNode.GetCurrentTerm()))
 	// TODO: step down if needed - become follower
 	if req.GetTerm() < r.RaftNode.GetCurrentTerm() {
+		slog.Info(fmt.Sprintf("Ignored term from request: %d, Current term: %d\n", req.GetTerm(), r.RaftNode.GetCurrentTerm()))
 		return r.buildRequestVoteResponse(false), nil
 	}
 
 	if r.RaftNode.VotedForTerm() && r.RaftNode.GetVotedFor() != req.GetCandidateId() {
-		slog.Info(fmt.Sprintln("ALREADY VOTED"))
+		slog.Info(fmt.Sprintln("Already voted"))
 		return r.buildRequestVoteResponse(false), nil
 	}
 
@@ -118,7 +128,7 @@ func (r *RaftService) RequestVote(ctx context.Context, req *pb.RequestVoteReques
 			r.Log.GetLastIndex(),
 			req.GetLastLogTerm(),
 			r.RaftNode.GetCurrentTerm()))
-		slog.Info(fmt.Sprintln("CANDIDATE LOG NOT UP TO DATE"))
+		slog.Info(fmt.Sprintln("Candidate log not up to date"))
 		return r.buildRequestVoteResponse(false), nil
 	}
 

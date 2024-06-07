@@ -130,16 +130,19 @@ func (n *Network) SendAppendEntry(ctx context.Context, peerId string, entry *ent
 		// TODO: log error
 		return network.NotReceived
 	}
-	var lastIndex uint64
-	var lastTerm uint64
+	var prevIndex uint64
+	var prevTerm uint64
 	var err error
-
 	if entry != nil {
-		lastIndex = n.Log.GetLastIndex()
-		lastTerm, err = n.Log.GetTermAtIndex(lastIndex)
-		if err != nil {
-			// TODO: log error
-			return network.NotReceived
+		prevIndex = entry.Index - 1
+		if prevIndex == 0 {
+			prevTerm = 0
+		} else {
+			prevTerm, err = n.Log.GetTermAtIndex(prevIndex)
+			if err != nil {
+				// TODO: log error
+				return network.NotReceived
+			}
 		}
 	}
 
@@ -148,8 +151,8 @@ func (n *Network) SendAppendEntry(ctx context.Context, peerId string, entry *ent
 		res, err := peerClient.AppendEntries(ctx, &raft_service.AppendEntriesRequest{
 			Term:         n.Node.GetCurrentTerm(),
 			LeaderId:     n.GetId(),
-			PrevLogIndex: lastIndex,
-			PrevLogTerm:  lastTerm,
+			PrevLogIndex: prevIndex,
+			PrevLogTerm:  prevTerm,
 			LeaderCommit: n.Node.GetCommitIndex(),
 			Entry:        entry,
 		})

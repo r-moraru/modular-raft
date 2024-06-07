@@ -156,7 +156,6 @@ func (n *Node) SetCommitIndex(commitIndex uint64) {
 
 func (n *Node) ResetTimer() {
 	// TODO: randomize timer around electionTimeout range
-	slog.Info("Resetting timer.")
 	n.timerMutex.Lock()
 	defer n.timerMutex.Unlock()
 	n.timer = time.NewTimer(time.Duration(n.electionTimeout+uint64(rand.Intn(100))) * time.Millisecond)
@@ -167,7 +166,7 @@ func (n *Node) runFollowerIteration() {
 	defer n.timerMutex.RUnlock()
 	select {
 	case <-n.timer.C:
-		slog.Info("ELECTION TIMEOUT!! - turning into candidate.")
+		slog.Info("ELECTION TIMEOUT - turning into candidate.")
 		n.SetState(node.Candidate)
 	default:
 		return
@@ -242,7 +241,7 @@ func (n *Node) runIteration() {
 		n.runLeaderIteration()
 	}
 
-	if n.commitIndex > n.lastApplied {
+	if n.commitIndex > n.lastApplied && n.commitIndex < n.log.GetLastIndex() {
 		logEntry, err := n.log.GetEntry(n.lastApplied + 1)
 		if err != nil {
 			slog.Error(fmt.Sprintf("Failed to get next entry to apply at index %d from log.", n.lastApplied+1))
@@ -296,12 +295,15 @@ func (n *Node) SendAppendEntriesToPeers() chan struct{} {
 	n.nextIndex.Range(func(key any, value any) bool {
 		peerId := key.(string)
 		peerNextIndex := value.(uint64)
-		peerMatchIndex, found := n.matchIndex.Load(peerId)
+		peerMatchIndexVal, found := n.matchIndex.Load(peerId)
+		peerMatchIndex := peerMatchIndexVal.(uint64)
 		if !found {
 			slog.Error(fmt.Sprintf("Leader bookkeeping mismatch: peer %s from nextIndex not found in matchIndex.", peerId))
 			return true
 		}
-		if peerMatchIndex != n.log.GetLastIndex() {
+		slog.Info(fmt.Sprintf("SEND APPEND ENTRIES - peer match index %d; last log index %d\n", peerMatchIndex, n.log.GetLastIndex()))
+		if peerMatchIndex != n.log.GetLastIndex() && peerNextIndex <= n.log.GetLastIndex() {
+
 			logEntry, err := n.log.GetEntry(peerNextIndex)
 			if err != nil {
 				slog.Error(fmt.Sprintf("Failed to get entry at index %d from log.", peerNextIndex))
