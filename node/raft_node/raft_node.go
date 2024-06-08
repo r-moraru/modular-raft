@@ -266,27 +266,20 @@ func (n *Node) Run(ctx context.Context) {
 	}
 }
 
-func (n *Node) SendAppendEntry(peerId string, logEntry *entries.LogEntry) {
+func (n *Node) SendAppendEntry(peerId string, logEntry *entries.LogEntry, peerNextIndex uint64, peerMatchIndex uint64) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(n.heartbeat)*time.Millisecond)
 	defer cancel()
 	responseStatus := n.network.SendAppendEntry(ctx, peerId, logEntry)
 
-	value, loaded := n.nextIndex.Load(peerId)
-	if !loaded {
-		slog.Error(fmt.Sprintf("Bookkeeping error - peer %s not found.", peerId))
-		return
-	}
-	nextIndex, ok := value.(uint64)
-	if !ok {
-		slog.Error("Bookkeeping error - next index value is not uint64.")
-	}
-
 	switch responseStatus {
 	case network.Success:
-		n.matchIndex.Store(peerId, nextIndex)
-		n.nextIndex.Store(peerId, nextIndex+1)
+		n.matchIndex.Store(peerId, peerNextIndex)
+		n.nextIndex.Store(peerId, peerNextIndex+1)
 	case network.LogInconsistency:
-		n.nextIndex.Store(peerId, nextIndex-1)
+		n.nextIndex.Store(peerId, peerNextIndex-1)
+		if peerMatchIndex >= peerNextIndex {
+			n.matchIndex.Store(peerId, peerNextIndex-1)
+		}
 	}
 }
 
@@ -303,6 +296,8 @@ func (n *Node) SendAppendEntriesToPeers() chan struct{} {
 			return true
 		}
 
+		slog.Info(fmt.Sprintf("PEER MATCH INDEX FOR PEER %s: %d", peerId, peerMatchIndex))
+		slog.Info(fmt.Sprintf("PEER NEXT INDEX FOR PEER %s: %d", peerId, peerNextIndex))
 		if peerMatchIndex != n.log.GetLastIndex() && peerNextIndex <= n.log.GetLastIndex() {
 
 			logEntry, err := n.log.GetEntry(peerNextIndex)
@@ -315,7 +310,7 @@ func (n *Node) SendAppendEntriesToPeers() chan struct{} {
 			go func() {
 				defer wg.Done()
 				slog.Info("Sending append entry to " + peerId + "\n")
-				n.SendAppendEntry(peerId, logEntry)
+				n.SendAppendEntry(peerId, logEntry, peerNextIndex, peerMatchIndex)
 			}()
 		} else {
 			slog.Info("Sending heartbeat to " + peerId + "\n")
@@ -326,19 +321,11 @@ func (n *Node) SendAppendEntriesToPeers() chan struct{} {
 				defer cancel()
 				responseStatus := n.network.SendHeartbeat(ctx, peerId, peerNextIndex-1)
 
-				value, loaded := n.nextIndex.Load(peerId)
-				if !loaded {
-					slog.Error(fmt.Sprintf("Bookkeeping error - peer %s not found.", peerId))
-					return
-				}
-				nextIndex, ok := value.(uint64)
-				if !ok {
-					slog.Error("Bookkeeping error - next index value is not uint64.")
-				}
-
-				// TODO: set match index to peerNextIndex-1
 				if responseStatus == network.LogInconsistency {
-					n.nextIndex.Store(peerId, nextIndex-1)
+					n.nextIndex.Store(peerId, peerNextIndex-1)
+					if peerMatchIndex >= peerNextIndex {
+						n.matchIndex.Store(peerId, peerNextIndex-1)
+					}
 				}
 			}()
 		}
