@@ -59,6 +59,7 @@ func (s *RaftServiceTestSuite) TestAppendEntriesNoEntryAtPrevLogIndex() {
 	s.raftNode.EXPECT().GetState().Return(node.Follower).Once()
 	s.raftNode.EXPECT().ResetTimer().Once()
 	s.log.EXPECT().GetLength().Return(14)
+	s.raftNode.EXPECT().GetCommitIndex().Return(14).Once()
 	req := &raft_service.AppendEntriesRequest{
 		Term:         currentTerm,
 		LeaderId:     leaderId,
@@ -86,6 +87,7 @@ func (s *RaftServiceTestSuite) TestAppendEntriesTurnsNodeToFollowerIfTermPasses(
 	s.raftNode.EXPECT().ClearVotedFor().Once()
 	s.raftNode.EXPECT().SetCurrentTerm(currentTerm)
 	s.raftNode.EXPECT().ResetTimer().Once()
+	s.raftNode.EXPECT().GetCommitIndex().Return(14).Once()
 	s.log.EXPECT().GetLength().Return(14)
 	req := &raft_service.AppendEntriesRequest{
 		Term:         currentTerm,
@@ -113,6 +115,7 @@ func (s *RaftServiceTestSuite) TestAppendEntriesThrowsErrorIfLogCannotGetTerm() 
 	s.raftNode.EXPECT().GetState().Return(node.Follower).Once()
 	s.raftNode.EXPECT().ResetTimer().Once()
 	s.log.EXPECT().GetLength().Return(prevLogIndex)
+	s.raftNode.EXPECT().GetCommitIndex().Return(14).Once()
 	s.log.EXPECT().GetTermAtIndex(prevLogIndex).Return(0, errors.New("error"))
 	req := &raft_service.AppendEntriesRequest{
 		Term:         currentTerm,
@@ -141,6 +144,7 @@ func (s *RaftServiceTestSuite) TestAppendEntriesReturnsFalseIfPrevTermMismatch()
 	s.raftNode.EXPECT().ResetTimer().Once()
 	s.log.EXPECT().GetLength().Return(prevLogIndex)
 	s.log.EXPECT().GetTermAtIndex(prevLogIndex).Return(currentTerm-1, nil)
+	s.raftNode.EXPECT().GetCommitIndex().Return(14).Once()
 	req := &raft_service.AppendEntriesRequest{
 		Term:         currentTerm,
 		LeaderId:     leaderId,
@@ -167,6 +171,9 @@ func (s *RaftServiceTestSuite) TestAppendEntriesAcceptsHeartbeat() {
 	s.raftNode.EXPECT().SetCurrentLeaderID(leaderId)
 	s.raftNode.EXPECT().GetState().Return(node.Follower).Once()
 	s.raftNode.EXPECT().ResetTimer().Once()
+	s.log.EXPECT().GetLength().Return(prevLogIndex)
+	s.log.EXPECT().GetTermAtIndex(prevLogIndex).Return(currentTerm, nil)
+	s.raftNode.EXPECT().GetCommitIndex().Return(14).Once()
 	req := &raft_service.AppendEntriesRequest{
 		Term:         currentTerm,
 		LeaderId:     leaderId,
@@ -196,6 +203,7 @@ func (s *RaftServiceTestSuite) TestAppendEntriesReturnsSuccessIfItAleadyHasTheEn
 	s.log.EXPECT().GetTermAtIndex(prevLogIndex).Return(currentTerm, nil).Once()
 	s.log.EXPECT().GetLastIndex().Return(prevLogIndex + 1)
 	s.log.EXPECT().GetTermAtIndex(prevLogIndex+1).Return(currentTerm, nil).Once()
+	s.raftNode.EXPECT().GetCommitIndex().Return(14).Once()
 	req := &raft_service.AppendEntriesRequest{
 		Term:         currentTerm,
 		LeaderId:     leaderId,

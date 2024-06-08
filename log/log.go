@@ -13,5 +13,9 @@ type Log interface {
 	AppendEntry(term uint64, clientID string, serializationID uint64, entry string) error
 }
 
-// Implementation:
-// 		Use read write waitgroup
+func GetTermAtIndexHelper(l Log, index uint64) (uint64, error) {
+	if index == 0 {
+		return 0, nil
+	}
+	return l.GetTermAtIndex(index)
+}

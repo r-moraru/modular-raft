@@ -155,10 +155,9 @@ func (n *Node) SetCommitIndex(commitIndex uint64) {
 }
 
 func (n *Node) ResetTimer() {
-	// TODO: randomize timer around electionTimeout range
 	n.timerMutex.Lock()
 	defer n.timerMutex.Unlock()
-	n.timer = time.NewTimer(time.Duration(n.electionTimeout+uint64(rand.Intn(100))) * time.Millisecond)
+	n.timer = time.NewTimer(time.Duration(n.electionTimeout+uint64(rand.Intn(int(n.electionTimeout)/2))) * time.Millisecond)
 }
 
 func (n *Node) runFollowerIteration() {

@@ -7,6 +7,7 @@ import (
 
 	log_mocks "github.com/r-moraru/modular-raft/log/mocks"
 	"github.com/r-moraru/modular-raft/network"
+	"github.com/r-moraru/modular-raft/node"
 	node_mocks "github.com/r-moraru/modular-raft/node/mocks"
 	"github.com/r-moraru/modular-raft/proto/entries"
 	"github.com/r-moraru/modular-raft/proto/raft_service"
@@ -61,6 +62,7 @@ func (s *RaftNetworkTestSuite) SetupTest() {
 }
 
 func (s *RaftNetworkTestSuite) mockSuccessfulRequestVoteCalls(peerId string, term uint64) {
+	s.node.EXPECT().GetState().Return(node.Candidate).Once()
 	s.log.EXPECT().GetLastIndex().Return(s.lastIndex).Once()
 	s.log.EXPECT().GetTermAtIndex(s.lastIndex).Return(s.lastTerm, nil).Once()
 	s.peerMocks[peerId].EXPECT().RequestVote(mock.Anything, &raft_service.RequestVoteRequest{
@@ -75,6 +77,7 @@ func (s *RaftNetworkTestSuite) mockSuccessfulRequestVoteCalls(peerId string, ter
 }
 
 func (s *RaftNetworkTestSuite) mockTermIssueRequestVoteCalls(peerId string, term uint64) {
+	s.node.EXPECT().GetState().Return(node.Candidate).Once()
 	s.log.EXPECT().GetLastIndex().Return(s.lastIndex).Once()
 	s.log.EXPECT().GetTermAtIndex(s.lastIndex).Return(s.lastTerm, nil).Once()
 	s.peerMocks[peerId].EXPECT().RequestVote(mock.Anything, &raft_service.RequestVoteRequest{
@@ -89,6 +92,7 @@ func (s *RaftNetworkTestSuite) mockTermIssueRequestVoteCalls(peerId string, term
 }
 
 func (s *RaftNetworkTestSuite) mockTimedOutRequestVoteCalls(peerId string, term uint64) {
+	s.node.EXPECT().GetState().Return(node.Candidate).Once()
 	s.log.EXPECT().GetLastIndex().Return(s.lastIndex).Once()
 	s.log.EXPECT().GetTermAtIndex(s.lastIndex).Return(s.lastTerm, nil).Once()
 	timer := time.NewTimer(time.Duration(s.network.ElectionTimeout*2) * time.Millisecond)
@@ -207,10 +211,13 @@ func (s *RaftNetworkTestSuite) TestSendRequestVoteTimeout() {
 func (s *RaftNetworkTestSuite) TestSendHeartbeatSuccess() {
 	s.node.EXPECT().GetCurrentTerm().Return(s.currentTerm).Once()
 	s.node.EXPECT().GetCommitIndex().Return(s.commitIndex).Once()
+	s.log.EXPECT().GetTermAtIndex(s.lastIndex).Return(s.lastTerm, nil).Once()
 	s.peerMocks["node2"].EXPECT().AppendEntries(mock.Anything, &raft_service.AppendEntriesRequest{
 		Term:         s.currentTerm,
 		LeaderId:     s.network.GetId(),
 		LeaderCommit: s.commitIndex,
+		PrevLogIndex: s.lastIndex,
+		PrevLogTerm:  s.lastTerm,
 		Entry:        nil,
 	}).Return(&raft_service.AppendEntriesResponse{
 		Term:    s.lastTerm,
@@ -220,8 +227,7 @@ func (s *RaftNetworkTestSuite) TestSendHeartbeatSuccess() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.network.ElectionTimeout)*time.Millisecond)
 	defer cancel()
-	// TODO: mock this properly
-	s.network.SendHeartbeat(ctx, "node2", 0)
+	s.network.SendHeartbeat(ctx, "node2", s.lastIndex)
 
 	<-ctx.Done()
 }
@@ -229,7 +235,6 @@ func (s *RaftNetworkTestSuite) TestSendHeartbeatSuccess() {
 func (s *RaftNetworkTestSuite) TestSendAppendEntriesSuccess() {
 	t := s.T()
 
-	s.log.EXPECT().GetLastIndex().Return(s.lastIndex).Once()
 	s.log.EXPECT().GetTermAtIndex(s.lastIndex).Return(s.lastTerm, nil).Once()
 	s.node.EXPECT().GetCurrentTerm().Return(s.currentTerm).Once()
 	s.node.EXPECT().GetCommitIndex().Return(s.commitIndex).Once()
@@ -239,7 +244,9 @@ func (s *RaftNetworkTestSuite) TestSendAppendEntriesSuccess() {
 		PrevLogIndex: s.lastIndex,
 		PrevLogTerm:  s.lastTerm,
 		LeaderCommit: s.commitIndex,
-		Entry:        &entries.LogEntry{},
+		Entry: &entries.LogEntry{
+			Index: s.lastIndex + 1,
+		},
 	}).Return(&raft_service.AppendEntriesResponse{
 		Term:    s.lastTerm,
 		Success: true,
@@ -248,7 +255,7 @@ func (s *RaftNetworkTestSuite) TestSendAppendEntriesSuccess() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.network.ElectionTimeout)*time.Millisecond)
 	defer cancel()
-	status := s.network.SendAppendEntry(ctx, "node2", &entries.LogEntry{})
+	status := s.network.SendAppendEntry(ctx, "node2", &entries.LogEntry{Index: s.lastIndex + 1})
 
 	<-ctx.Done()
 
@@ -258,7 +265,6 @@ func (s *RaftNetworkTestSuite) TestSendAppendEntriesSuccess() {
 func (s *RaftNetworkTestSuite) TestSendAppendEntriesLogInconsistency() {
 	t := s.T()
 
-	s.log.EXPECT().GetLastIndex().Return(s.lastIndex).Once()
 	s.log.EXPECT().GetTermAtIndex(s.lastIndex).Return(s.lastTerm, nil).Once()
 	s.node.EXPECT().GetCurrentTerm().Return(s.currentTerm).Once()
 	s.node.EXPECT().GetCommitIndex().Return(s.commitIndex).Once()
@@ -268,7 +274,7 @@ func (s *RaftNetworkTestSuite) TestSendAppendEntriesLogInconsistency() {
 		PrevLogIndex: s.lastIndex,
 		PrevLogTerm:  s.lastTerm,
 		LeaderCommit: s.commitIndex,
-		Entry:        &entries.LogEntry{},
+		Entry:        &entries.LogEntry{Index: s.lastIndex + 1},
 	}).Return(&raft_service.AppendEntriesResponse{
 		Term:    s.lastTerm,
 		Success: false,
@@ -277,7 +283,7 @@ func (s *RaftNetworkTestSuite) TestSendAppendEntriesLogInconsistency() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.network.ElectionTimeout)*time.Millisecond)
 	defer cancel()
-	status := s.network.SendAppendEntry(ctx, "node2", &entries.LogEntry{})
+	status := s.network.SendAppendEntry(ctx, "node2", &entries.LogEntry{Index: s.lastIndex + 1})
 
 	<-ctx.Done()
 
@@ -287,7 +293,6 @@ func (s *RaftNetworkTestSuite) TestSendAppendEntriesLogInconsistency() {
 func (s *RaftNetworkTestSuite) TestSendAppendEntriesTimedOut() {
 	t := s.T()
 
-	s.log.EXPECT().GetLastIndex().Return(s.lastIndex).Once()
 	s.log.EXPECT().GetTermAtIndex(s.lastIndex).Return(s.lastTerm, nil).Once()
 	s.node.EXPECT().GetCurrentTerm().Return(s.currentTerm).Once()
 	s.node.EXPECT().GetCommitIndex().Return(s.commitIndex).Once()
@@ -298,7 +303,7 @@ func (s *RaftNetworkTestSuite) TestSendAppendEntriesTimedOut() {
 		PrevLogIndex: s.lastIndex,
 		PrevLogTerm:  s.lastTerm,
 		LeaderCommit: s.commitIndex,
-		Entry:        &entries.LogEntry{},
+		Entry:        &entries.LogEntry{Index: s.lastIndex + 1},
 	}).Return(&raft_service.AppendEntriesResponse{
 		Term:    s.lastTerm,
 		Success: false,
@@ -306,7 +311,7 @@ func (s *RaftNetworkTestSuite) TestSendAppendEntriesTimedOut() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.network.ElectionTimeout)*time.Millisecond)
 	defer cancel()
-	status := s.network.SendAppendEntry(ctx, "node2", &entries.LogEntry{})
+	status := s.network.SendAppendEntry(ctx, "node2", &entries.LogEntry{Index: s.lastIndex + 1})
 
 	<-ctx.Done()
 

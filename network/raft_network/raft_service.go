@@ -68,7 +68,6 @@ func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRe
 	}
 
 	if req.Entry == nil {
-		// Received heartbeat
 		slog.Info("APPEND ENTRIES - Received heartbeat.")
 		return r.buildAppendEntriesResponse(true), nil
 	}
@@ -80,7 +79,6 @@ func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRe
 			return r.buildAppendEntriesResponse(false), err
 		}
 		if termOfLogIndex == req.Entry.Term {
-			// already appended
 			slog.Info("APPEND ENTRIES - Already have entry")
 			return r.buildAppendEntriesResponse(true), nil
 		}
