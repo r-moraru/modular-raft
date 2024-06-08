@@ -12,6 +12,8 @@ import (
 	"github.com/r-moraru/modular-raft/node"
 	"github.com/r-moraru/modular-raft/proto/entries"
 	"github.com/r-moraru/modular-raft/proto/raft_service"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type Network struct {
@@ -23,12 +25,41 @@ type Network struct {
 	Node node.Node
 }
 
+func BuildPeerMap(nodeNum int, nodeIds []string, nodeAddrs []string) map[string]raft_service.RaftServiceClient {
+	peers := make(map[string]raft_service.RaftServiceClient)
+	for i := 0; i < len(nodeIds); i++ {
+		if i == nodeNum {
+			continue
+		}
+		slog.Info("Adding peer with address " + nodeAddrs[i] + "\n")
+		conn, err := grpc.Dial(
+			nodeAddrs[i],
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithBlock(),
+		)
+		slog.Info("Successfully added peer " + nodeIds[i] + " with address " + nodeAddrs[i] + "\n")
+		if err != nil {
+			slog.Error("Error connecting peer" + nodeAddrs[i] + "\n")
+		}
+		c := raft_service.NewRaftServiceClient(conn)
+		peers[nodeIds[i]] = c
+	}
+	return peers
+}
+
+func (n *Network) Init(raftNode node.Node, log log.Log, nodeNum int, nodeIds []string, nodeAddrs []string) {
+	n.Node = raftNode
+	n.Log = log
+	n.NodeId = nodeIds[nodeNum]
+	n.Peers = BuildPeerMap(nodeNum, nodeIds, nodeAddrs)
+}
+
 func (n *Network) GetId() string {
 	return n.NodeId
 }
 
 func (n *Network) GetPeerList() []string {
-	peerList := make([]string, len(n.Peers))
+	peerList := make([]string, 0)
 	for peerId := range n.Peers {
 		peerList = append(peerList, peerId)
 	}
