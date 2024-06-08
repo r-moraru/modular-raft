@@ -220,7 +220,8 @@ func (s *RaftNetworkTestSuite) TestSendHeartbeatSuccess() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.network.ElectionTimeout)*time.Millisecond)
 	defer cancel()
-	s.network.SendHeartbeat(ctx, "node2")
+	// TODO: mock this properly
+	s.network.SendHeartbeat(ctx, "node2", 0)
 
 	<-ctx.Done()
 }

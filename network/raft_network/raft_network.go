@@ -120,30 +120,11 @@ func (n *Network) SendRequestVote(ctx context.Context, term uint64) chan bool {
 	return majorityVoteChan
 }
 
-func (n *Network) SendHeartbeat(ctx context.Context, peerId string) {
-	n.SendAppendEntry(ctx, peerId, nil)
-}
-
-func (n *Network) SendAppendEntry(ctx context.Context, peerId string, entry *entries.LogEntry) network.ResponseStatus {
+func (n *Network) SendAppendEntryHandler(ctx context.Context, peerId string, prevIndex uint64, prevTerm uint64, entry *entries.LogEntry) network.ResponseStatus {
 	peerClient, found := n.Peers[peerId]
 	if !found {
 		// TODO: log error
 		return network.NotReceived
-	}
-	var prevIndex uint64
-	var prevTerm uint64
-	var err error
-	if entry != nil {
-		prevIndex = entry.Index - 1
-		if prevIndex == 0 {
-			prevTerm = 0
-		} else {
-			prevTerm, err = n.Log.GetTermAtIndex(prevIndex)
-			if err != nil {
-				// TODO: log error
-				return network.NotReceived
-			}
-		}
 	}
 
 	resChan := make(chan *raft_service.AppendEntriesResponse, 1)
@@ -165,17 +146,59 @@ func (n *Network) SendAppendEntry(ctx context.Context, peerId string, entry *ent
 	select {
 	case res := <-resChan:
 		if res == nil {
+			slog.Error("AppendEntry was not received.")
 			return network.NotReceived
 		}
 		if res.Term > n.Node.GetCurrentTerm() {
+			slog.Error(fmt.Sprintf("TERM ISSUE: peer term: %d, local term: %d\n", res.Term, n.Node.GetCurrentTerm()))
 			return network.TermIssue
 		}
 		if res.Success {
 			return network.Success
 		} else {
+			slog.Info("SENDAPPENDENTRY - received fail")
 			return network.LogInconsistency
 		}
 	case <-ctx.Done():
+		slog.Error("SENDAPPENDENTRY - NOT RECEIVED")
 		return network.NotReceived
 	}
+}
+
+func (n *Network) SendHeartbeat(ctx context.Context, peerId string, prevIndex uint64) network.ResponseStatus {
+	var prevTerm uint64
+	var err error
+	if prevIndex == 0 {
+		// slog.Info("GOODGOODGOODGOOD")
+		prevTerm = 0
+	} else {
+		// slog.Info("BADBADBADBADBAD")
+		prevTerm, err = n.Log.GetTermAtIndex(prevIndex)
+		if err != nil {
+			// TODO: log error
+			return network.NotReceived
+		}
+	}
+
+	// slog.Info("SENDINGHEARTBEAT APPEND ENTRY")
+	return n.SendAppendEntryHandler(ctx, peerId, prevIndex, prevTerm, nil)
+}
+
+func (n *Network) SendAppendEntry(ctx context.Context, peerId string, entry *entries.LogEntry) network.ResponseStatus {
+	var prevIndex uint64
+	var prevTerm uint64
+	var err error
+	if entry != nil {
+		prevIndex = entry.Index - 1
+		if prevIndex == 0 {
+			prevTerm = 0
+		} else {
+			prevTerm, err = n.Log.GetTermAtIndex(prevIndex)
+			if err != nil {
+				// TODO: log error
+				return network.NotReceived
+			}
+		}
+	}
+	return n.SendAppendEntryHandler(ctx, peerId, prevIndex, prevTerm, entry)
 }

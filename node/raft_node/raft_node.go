@@ -241,7 +241,7 @@ func (n *Node) runIteration() {
 		n.runLeaderIteration()
 	}
 
-	if n.commitIndex > n.lastApplied && n.commitIndex < n.log.GetLastIndex() {
+	if n.commitIndex > n.lastApplied && n.commitIndex <= n.log.GetLastIndex() {
 		logEntry, err := n.log.GetEntry(n.lastApplied + 1)
 		if err != nil {
 			slog.Error(fmt.Sprintf("Failed to get next entry to apply at index %d from log.", n.lastApplied+1))
@@ -271,6 +271,7 @@ func (n *Node) SendAppendEntry(peerId string, logEntry *entries.LogEntry) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(n.heartbeat)*time.Millisecond)
 	defer cancel()
 	responseStatus := n.network.SendAppendEntry(ctx, peerId, logEntry)
+
 	value, loaded := n.nextIndex.Load(peerId)
 	if !loaded {
 		slog.Error(fmt.Sprintf("Bookkeeping error - peer %s not found.", peerId))
@@ -280,6 +281,7 @@ func (n *Node) SendAppendEntry(peerId string, logEntry *entries.LogEntry) {
 	if !ok {
 		slog.Error("Bookkeeping error - next index value is not uint64.")
 	}
+
 	switch responseStatus {
 	case network.Success:
 		n.matchIndex.Store(peerId, nextIndex)
@@ -318,9 +320,27 @@ func (n *Node) SendAppendEntriesToPeers() chan struct{} {
 			}()
 		} else {
 			slog.Info("Sending heartbeat to " + peerId + "\n")
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(n.heartbeat)*time.Millisecond)
-			defer cancel()
-			n.network.SendHeartbeat(ctx, peerId)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				ctx, cancel := context.WithTimeout(context.Background(), time.Duration(n.heartbeat)*time.Millisecond)
+				defer cancel()
+				responseStatus := n.network.SendHeartbeat(ctx, peerId, peerNextIndex-1)
+
+				value, loaded := n.nextIndex.Load(peerId)
+				if !loaded {
+					slog.Error(fmt.Sprintf("Bookkeeping error - peer %s not found.", peerId))
+					return
+				}
+				nextIndex, ok := value.(uint64)
+				if !ok {
+					slog.Error("Bookkeeping error - next index value is not uint64.")
+				}
+
+				if responseStatus == network.LogInconsistency {
+					n.nextIndex.Store(peerId, nextIndex-1)
+				}
+			}()
 		}
 
 		return true
