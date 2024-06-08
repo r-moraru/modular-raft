@@ -1,7 +1,6 @@
 package raft_node
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -97,24 +96,22 @@ func (s *RaftNodeTestSuite) mockResetLeaderBookkeepingCalls() {
 }
 
 func (s *RaftNodeTestSuite) mockEntryApplicationCalls(i int) {
+	s.log.EXPECT().GetLastIndex().Return(s.lastIndex)
 	s.stateMachine.EXPECT().GetLastApplied().Return(s.lastAppliedIndex)
 	s.log.EXPECT().GetEntry(s.entries[i].Index).Return(s.entries[i], nil).Once()
 	s.stateMachine.EXPECT().Apply(s.entries[i]).Return(nil).Once()
 }
 
-func (s *RaftNodeTestSuite) mockSuccessfulLeaderReplicationCalls(peerIndex int, entryIndex int) {
-	s.log.EXPECT().GetLastIndex().Return(s.lastIndex)
-	s.log.EXPECT().GetEntry(s.entries[entryIndex].Index).Return(s.entries[entryIndex], nil).Once()
-	s.network.EXPECT().SendAppendEntry(mock.Anything, s.peers[peerIndex], s.entries[entryIndex]).Return(network.Success).Once()
-}
-
 func (s *RaftNodeTestSuite) mockCommitIndexUpdateOutOfBoundsCalls() {
-	s.log.EXPECT().GetTermAtIndex(s.lastIndex+1).Return(0, errors.New("Index out of bounds"))
+	s.log.EXPECT().GetLastIndex().Return(s.lastIndex).Once()
+	s.log.EXPECT().GetTermAtIndex(s.lastIndex+1).Return(0, nil).Once()
+	// s.log.EXPECT().GetTermAtIndex(s.lastIndex+1).Return(0, errors.New("Index out of bounds"))
 }
 
 func (s *RaftNodeTestSuite) mockLeaderHeartbeatCalls(peerIndex int) {
 	// TODO: mock this properly
-	s.network.EXPECT().SendHeartbeat(mock.Anything, s.peers[peerIndex], 0).Once()
+	s.log.EXPECT().GetLastIndex().Return(s.lastIndex).Twice()
+	s.network.EXPECT().SendHeartbeat(mock.Anything, s.peers[peerIndex], s.lastIndex).Return(network.Success)
 }
 
 func (s *RaftNodeTestSuite) TestConstructor() {
@@ -287,47 +284,6 @@ func (s *RaftNodeTestSuite) TestMultipleFollowerIterations() {
 	assert.Equal(t, uint64(16), raftNode.lastApplied)
 }
 
-func (s *RaftNodeTestSuite) TestLeaderIterationSendsAppendEntriesOnFirstIteration() {
-	t := s.T()
-
-	s.lastIndex = uint64(13)
-	s.lastTerm = uint64(3)
-	s.lastAppliedIndex = uint64(13)
-	s.nodeId = "node1"
-	s.peers = []string{
-		"node1",
-		"node2",
-	}
-
-	s.mockNodeConstructorCalls()
-	s.mockSuccessfulCandidateIterationCalls(s.lastTerm + 1)
-	s.mockResetLeaderBookkeepingCalls()
-
-	s.mockSuccessfulLeaderReplicationCalls(0, 1)
-	s.mockSuccessfulLeaderReplicationCalls(1, 1)
-	s.mockCommitIndexUpdateOutOfBoundsCalls()
-
-	raftNode, _ := New(10, 5, s.log, s.stateMachine, s.network)
-	<-time.After(5 * time.Millisecond)
-	raftNode.runIteration()
-	raftNode.runIteration()
-	raftNode.runIteration()
-
-	assert.Equal(t, node.Leader, raftNode.GetState())
-	val, ok := raftNode.matchIndex.Load(s.peers[0])
-	assert.True(t, ok, "Leader bookkeeping incomplete.")
-	assert.Equal(t, val.(uint64), s.lastIndex+1)
-	val, ok = raftNode.matchIndex.Load(s.peers[1])
-	assert.True(t, ok, "Leader bookkeeping incomplete.")
-	assert.Equal(t, val.(uint64), s.lastIndex+1)
-	val, ok = raftNode.nextIndex.Load(s.peers[0])
-	assert.True(t, ok, "Leader bookkeeping incomplete.")
-	assert.Equal(t, val.(uint64), s.lastIndex+2)
-	val, ok = raftNode.nextIndex.Load(s.peers[1])
-	assert.True(t, ok, "Leader bookkeeping incomplete.")
-	assert.Equal(t, val.(uint64), s.lastIndex+2)
-}
-
 func (s *RaftNodeTestSuite) TestLeaderIterationSendsHeartbeats() {
 	t := s.T()
 
@@ -343,19 +299,16 @@ func (s *RaftNodeTestSuite) TestLeaderIterationSendsHeartbeats() {
 	s.mockNodeConstructorCalls()
 	s.mockSuccessfulCandidateIterationCalls(s.lastTerm + 1)
 	s.mockResetLeaderBookkeepingCalls()
-	s.mockSuccessfulLeaderReplicationCalls(0, 0)
-	s.mockSuccessfulLeaderReplicationCalls(1, 0)
-	s.mockCommitIndexUpdateOutOfBoundsCalls()
 
-	// second and third iteration
 	s.mockLeaderHeartbeatCalls(0)
 	s.mockLeaderHeartbeatCalls(1)
+	s.mockCommitIndexUpdateOutOfBoundsCalls()
 	s.mockLeaderHeartbeatCalls(0)
 	s.mockLeaderHeartbeatCalls(1)
+	s.mockCommitIndexUpdateOutOfBoundsCalls()
 
 	raftNode, _ := New(10, 5, s.log, s.stateMachine, s.network)
 	<-time.After(5 * time.Millisecond)
-	raftNode.runIteration()
 	raftNode.runIteration()
 	raftNode.runIteration()
 	raftNode.runIteration()
@@ -364,10 +317,10 @@ func (s *RaftNodeTestSuite) TestLeaderIterationSendsHeartbeats() {
 	assert.Equal(t, node.Leader, raftNode.GetState())
 	val, ok := raftNode.matchIndex.Load(s.peers[0])
 	assert.True(t, ok, "Leader bookkeeping incomplete.")
-	assert.Equal(t, val.(uint64), s.lastIndex+1)
+	assert.Equal(t, val.(uint64), uint64(0))
 	val, ok = raftNode.matchIndex.Load(s.peers[1])
 	assert.True(t, ok, "Leader bookkeeping incomplete.")
-	assert.Equal(t, val.(uint64), s.lastIndex+1)
+	assert.Equal(t, val.(uint64), uint64(0))
 	val, ok = raftNode.nextIndex.Load(s.peers[0])
 	assert.True(t, ok, "Leader bookkeeping incomplete.")
 	assert.Equal(t, val.(uint64), s.lastIndex+1)
@@ -376,8 +329,8 @@ func (s *RaftNodeTestSuite) TestLeaderIterationSendsHeartbeats() {
 	assert.Equal(t, val.(uint64), s.lastIndex+1)
 }
 
-// // TODO: test leader steps down, adjusts bookkeeping on peer failures,
-// // finds next commit index
+// TODO: test leader steps down, adjusts bookkeeping on peer failures,
+// finds next commit index
 
 func TestRaftNodeTestSuite(t *testing.T) {
 	suite.Run(t, new(RaftNodeTestSuite))

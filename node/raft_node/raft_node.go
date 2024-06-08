@@ -302,7 +302,7 @@ func (n *Node) SendAppendEntriesToPeers() chan struct{} {
 			slog.Error(fmt.Sprintf("Leader bookkeeping mismatch: peer %s from nextIndex not found in matchIndex.", peerId))
 			return true
 		}
-		slog.Info(fmt.Sprintf("SEND APPEND ENTRIES - peer match index %d; last log index %d\n", peerMatchIndex, n.log.GetLastIndex()))
+
 		if peerMatchIndex != n.log.GetLastIndex() && peerNextIndex <= n.log.GetLastIndex() {
 
 			logEntry, err := n.log.GetEntry(peerNextIndex)
@@ -336,6 +336,7 @@ func (n *Node) SendAppendEntriesToPeers() chan struct{} {
 					slog.Error("Bookkeeping error - next index value is not uint64.")
 				}
 
+				// TODO: set match index to peerNextIndex-1
 				if responseStatus == network.LogInconsistency {
 					n.nextIndex.Store(peerId, nextIndex-1)
 				}
