@@ -48,7 +48,7 @@ func New(log log.Log, stateMachine state_machine.StateMachine, electionTimeout u
 	}, nil
 }
 
-func (s *RaftServer) Start(nodeNum int, nodeIds []string, nodeAddrs []string) {
+func (s *RaftServer) Start(nodeNum int, nodeIds []string, nodeAddrs []string, listenAddr string) {
 	slog.Info("Starting raft consensus server at " + nodeAddrs[nodeNum])
 	lis, err := net.Listen("tcp", nodeAddrs[nodeNum])
 	if err != nil {
@@ -72,6 +72,10 @@ func (s *RaftServer) Start(nodeNum int, nodeIds []string, nodeAddrs []string) {
 
 	go func() {
 		s.Node.Run(context.Background())
+	}()
+
+	go func() {
+		s.Run(listenAddr)
 	}()
 }
 

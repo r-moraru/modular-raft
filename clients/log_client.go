@@ -2,31 +2,38 @@ package clients
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/r-moraru/modular-raft/proto/entries"
 )
 
 const (
-	lastLogPath = "last_log/"
-	lengthPath  = "length/"
-	entryPath   = "entry/"
-	termPath    = "term/"
-	insertPath  = "insert/"
-	appendPath  = "append/"
+	LastLogPath = "/last_log"
+	LengthPath  = "/length"
+	EntryPath   = "/entry"
+	TermPath    = "/term"
+	InsertPath  = "/insert"
+	AppendPath  = "/append"
 )
 
-type getLastIndexResponse struct {
+type GetLastIndexResponse struct {
 	LastIndex uint64 `json:"last_index"`
 }
 
-type getLengthResponse struct {
+type GetLengthResponse struct {
 	Length uint64 `json:"length"`
 }
 
-type getTermResponse struct {
+type GetTermRequest struct {
+	Index uint64 `json:"index"`
+}
+
+type GetTermResponse struct {
 	Term uint64 `json:"term"`
+}
+
+type GetEntryRequest struct {
+	Index uint64 `json:"index"`
 }
 
 type LogClient Client
@@ -41,8 +48,8 @@ func NewLogClient(url string, timeout uint64) *LogClient {
 }
 
 func (l *LogClient) GetLastIndex() uint64 {
-	getLastIndexResponse := new(getLastIndexResponse)
-	err := (*Client)(l).get(l.url+lastLogPath, getLastIndexResponse)
+	getLastIndexResponse := new(GetLastIndexResponse)
+	err := (*Client)(l).get(l.url+LastLogPath, getLastIndexResponse)
 	if err != nil {
 		return 0
 	}
@@ -50,8 +57,8 @@ func (l *LogClient) GetLastIndex() uint64 {
 }
 
 func (l *LogClient) GetLength() uint64 {
-	getLengthResponse := new(getLengthResponse)
-	err := (*Client)(l).get(l.url+lengthPath, getLengthResponse)
+	getLengthResponse := new(GetLengthResponse)
+	err := (*Client)(l).get(l.url+LengthPath, getLengthResponse)
 	if err != nil {
 		return 0
 	}
@@ -59,9 +66,11 @@ func (l *LogClient) GetLength() uint64 {
 }
 
 func (l *LogClient) GetEntry(index uint64) (*entries.LogEntry, error) {
+	getEntryRequest := &GetEntryRequest{Index: index}
 	getEntryResponse := new(entries.LogEntry)
-	err := (*Client)(l).get(
-		l.url+lengthPath+strconv.Itoa(int(index)),
+	err := (*Client)(l).postWithResp(
+		l.url+LengthPath,
+		getEntryRequest,
 		getEntryResponse,
 	)
 	if err != nil {
@@ -71,9 +80,11 @@ func (l *LogClient) GetEntry(index uint64) (*entries.LogEntry, error) {
 }
 
 func (l *LogClient) GetTermAtIndex(index uint64) (uint64, error) {
-	getTermResponse := new(getTermResponse)
-	err := (*Client)(l).get(
-		l.url+termPath+strconv.Itoa(int(index)),
+	getTermRequest := &GetTermRequest{Index: index}
+	getTermResponse := new(GetTermResponse)
+	err := (*Client)(l).postWithResp(
+		l.url+TermPath,
+		getTermRequest,
 		getTermResponse,
 	)
 	if err != nil {
@@ -83,7 +94,7 @@ func (l *LogClient) GetTermAtIndex(index uint64) (uint64, error) {
 }
 
 func (l *LogClient) InsertLogEntry(entry *entries.LogEntry) error {
-	return (*Client)(l).post(l.url+insertPath, entry)
+	return (*Client)(l).post(l.url+InsertPath, entry)
 }
 
 func (l *LogClient) AppendEntry(term uint64, clientID string, serializationID uint64, entry string) error {
@@ -93,5 +104,5 @@ func (l *LogClient) AppendEntry(term uint64, clientID string, serializationID ui
 		SerializationID: serializationID,
 		Entry:           entry,
 	}
-	return (*Client)(l).post(l.url+appendPath, logEntry)
+	return (*Client)(l).post(l.url+AppendPath, logEntry)
 }

@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"sync"
 
-	"github.com/r-moraru/modular-raft/examples/kv_store"
+	"github.com/r-moraru/modular-raft/clients"
 	"github.com/r-moraru/modular-raft/raft_server"
+	"github.com/r-moraru/modular-raft/test_implementations/kv_store"
 )
 
 func main() {
@@ -24,10 +24,13 @@ func main() {
 		"localhost:5002",
 		"localhost:5003",
 	}
-
-	log := &kv_store.InMemoryLog{
-		Mutex: &sync.Mutex{},
+	listenAddrs := []string{
+		"localhost:8080/",
+		"localhost:8081/",
+		"localhost:8082/",
 	}
+
+	log := &clients.LogClient{}
 	stateMachine := &kv_store.KvStore{}
 
 	raftServer, err := raft_server.New(log, stateMachine, 5000, 1000)
@@ -35,7 +38,7 @@ func main() {
 		slog.Error("Failed to initialize raft server.")
 		return
 	}
-	raftServer.Start(*nodeNum, nodeIds, nodeAddrs)
+	raftServer.Start(*nodeNum, nodeIds, nodeAddrs, listenAddrs[*nodeNum])
 
 	input := bufio.NewScanner(os.Stdin)
 	for input.Scan() {
