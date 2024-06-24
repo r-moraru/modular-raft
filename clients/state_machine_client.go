@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	applyPath       = "/apply"
-	lastAppliedPath = "/last_applied"
-	getResultPath   = "/get_result"
+	ApplyPath       = "/apply"
+	LastAppliedPath = "/last_applied"
+	GetResultPath   = "/get_result"
 )
 
 type GetLastAppliedResponse struct {
@@ -44,12 +44,12 @@ func NewStateMachineClient(url string, timeout uint64) *StateMachineClient {
 }
 
 func (s *StateMachineClient) Apply(entry *entries.LogEntry) error {
-	return (*Client)(s).post(s.url+applyPath, entry)
+	return (*Client)(s).post(s.url+ApplyPath, entry)
 }
 
 func (s *StateMachineClient) GetLastApplied() uint64 {
 	getLastAppliedResponse := new(GetLastAppliedResponse)
-	err := (*Client)(s).get(s.url+lastAppliedPath, getLastAppliedResponse)
+	err := (*Client)(s).get(s.url+LastAppliedPath, getLastAppliedResponse)
 	if err != nil {
 		return 0
 	}
@@ -72,7 +72,7 @@ func (s *StateMachineClient) WaitForResult(ctx context.Context, clientID string,
 		return resultChan
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", s.url+getResultPath, bytes.NewReader(marshalledPayload))
+	req, err := http.NewRequestWithContext(ctx, "POST", s.url+GetResultPath, bytes.NewReader(marshalledPayload))
 	if err != nil {
 		slog.Error("Failed to create POST request.")
 		resultChan <- state_machine.ApplyResult{
