@@ -41,6 +41,7 @@ func (r *RaftService) AppendEntries(ctx context.Context, req *pb.AppendEntriesRe
 		r.RaftNode.SetCurrentTerm(req.GetTerm())
 	}
 
+	// TODO: set it but max at last log index
 	if req.GetLeaderCommit() > r.RaftNode.GetCommitIndex() {
 		slog.Info(fmt.Sprintf("APPEND ENTRIES - updated commit index to %d\n", req.GetLeaderCommit()))
 		r.RaftNode.SetCommitIndex(req.GetLeaderCommit())

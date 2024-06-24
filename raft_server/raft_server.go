@@ -114,6 +114,6 @@ func (s *RaftServer) CreateReplicationHandler() func(http.ResponseWriter, *http.
 func (s *RaftServer) Run(listenAddr string) {
 	http.HandleFunc("/replicate", s.CreateReplicationHandler())
 	if err := http.ListenAndServe(listenAddr, nil); err != nil {
-		logger.Fatalf("Raft server run failed.")
+		logger.Fatalf(err.Error())
 	}
 }

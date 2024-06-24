@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	applyPath       = "apply/"
-	lastAppliedPath = "last_applied/"
-	getResultPath   = "get_result/"
+	applyPath       = "/apply"
+	lastAppliedPath = "/last_applied"
+	getResultPath   = "/get_result"
 )
 
 type GetLastAppliedResponse struct {
@@ -97,7 +97,7 @@ func (s *StateMachineClient) WaitForResult(ctx context.Context, clientID string,
 		if resp.StatusCode < 200 || resp.StatusCode > 299 {
 			slog.Error("Response status: " + resp.Status + " from state machine.")
 			resultChan <- state_machine.ApplyResult{
-				Error: errors.New("Received error from state machine."),
+				Error: errors.New("received error from state machine"),
 			}
 			return
 		}

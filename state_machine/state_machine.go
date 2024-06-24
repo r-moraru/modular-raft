@@ -13,6 +13,6 @@ type ApplyResult struct {
 
 type StateMachine interface {
 	Apply(*entries.LogEntry) error
-	GetLastApplied() uint64
+	GetLastApplied() uint64 // TODO: add error
 	WaitForResult(ctx context.Context, clientID string, serializationID uint64) chan ApplyResult
 }

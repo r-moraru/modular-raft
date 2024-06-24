@@ -5,7 +5,7 @@ import (
 )
 
 type Log interface {
-	GetLastIndex() uint64
+	GetLastIndex() uint64 // TODO: add error, remove get length
 	GetLength() uint64
 	GetEntry(index uint64) (*entries.LogEntry, error)
 	GetTermAtIndex(index uint64) (uint64, error)
