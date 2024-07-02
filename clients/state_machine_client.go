@@ -58,7 +58,7 @@ func (s *StateMachineClient) GetLastApplied() uint64 {
 
 func (s *StateMachineClient) WaitForResult(ctx context.Context, clientID string, serializationID uint64) chan state_machine.ApplyResult {
 	resultChan := make(chan state_machine.ApplyResult, 1)
-	defer close(resultChan)
+
 	payload := &GetResultRequest{
 		ClientID:        clientID,
 		SerializationID: serializationID,

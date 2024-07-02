@@ -249,8 +249,9 @@ func (n *Node) runIteration() {
 		err = n.stateMachine.Apply(logEntry)
 		if err != nil {
 			slog.Error(fmt.Sprintf("State machine unable to apply entry at index %d, term %d.", logEntry.Index, logEntry.Term))
+		} else {
+			n.lastApplied += 1
 		}
-		n.lastApplied += 1
 	}
 }
 
