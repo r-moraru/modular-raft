@@ -2,7 +2,7 @@ package raft_server
 
 import (
 	"context"
-	logger "log"
+	"fmt"
 
 	"github.com/r-moraru/modular-raft/node"
 )
@@ -23,7 +23,7 @@ func (s *RaftServer) HandleReplicationRequest(ctx context.Context, clientID stri
 		return res, nil
 	case result := <-s.StateMachine.WaitForResult(ctx, clientID, serializationID):
 		if result.Error != nil {
-			logger.Fatalf("State machine returned error for clientID %s, serializationID %d.", clientID, serializationID)
+			fmt.Printf("State machine returned error for clientID %s, serializationID %d. Error: %v\n.", clientID, serializationID, result.Error.Error())
 			res.ReplicationStatus = node.ApplyError
 			return res, nil
 		}
