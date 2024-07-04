@@ -36,7 +36,7 @@ type StateMachineClient Client
 
 func NewStateMachineClient(url string, timeout uint64) *StateMachineClient {
 	return &StateMachineClient{
-		url: url,
+		url: "http://" + url,
 		httpClient: &http.Client{
 			Timeout: time.Duration(timeout) * time.Millisecond,
 		},
